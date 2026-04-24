@@ -73,8 +73,10 @@ constexpr auto PrefToggleEntries = std::array<std::pair<std::string_view, tr_qua
     { "alt-speed-enabled"sv, TR_KEY_alt_speed_enabled },
     { "compact-view"sv, TR_KEY_compact_view },
     { "show-filterbar"sv, TR_KEY_show_filterbar },
+    { "show-label-combo"sv, TR_KEY_show_label_combo },
     { "show-statusbar"sv, TR_KEY_show_statusbar },
     { "show-toolbar"sv, TR_KEY_show_toolbar },
+    { "show-tracker-combo"sv, TR_KEY_show_tracker_combo },
     { "sort-reversed"sv, TR_KEY_sort_reversed },
 } };
 
@@ -82,6 +84,7 @@ constexpr auto Entries = std::array{
     "copy-magnet-link-to-clipboard"sv,
     "delete-torrent"sv,
     "deselect-all"sv,
+    "edit-labels"sv,
     "donate"sv,
     "edit-preferences"sv,
     "help"sv,

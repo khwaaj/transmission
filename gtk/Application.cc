@@ -6,6 +6,7 @@
 
 #include "Actions.h"
 #include "DetailsDialog.h"
+#include "EditLabelsDialog.h"
 #include "Dialogs.h"
 #include "FilterBar.h"
 #include "GtkCompat.h"
@@ -339,6 +340,7 @@ bool Application::Impl::refresh_actions()
         gtr_action_set_sensitive("torrent-verify", has_selection);
         gtr_action_set_sensitive("remove-torrent", has_selection);
         gtr_action_set_sensitive("delete-torrent", has_selection);
+        gtr_action_set_sensitive("edit-labels", has_selection);
         gtr_action_set_sensitive("relocate-torrent", has_selection);
         gtr_action_set_sensitive("queue-move-top", has_selection);
         gtr_action_set_sensitive("queue-move-up", has_selection);
@@ -1539,6 +1541,17 @@ void Application::Impl::actions_handler(Glib::ustring const& action_name)
     {
         wind_->for_each_selected_torrent_until(
             sigc::bind_return(sigc::mem_fun(*this, &Impl::copy_magnet_link_to_clipboard), true));
+    }
+    else if (action_name == "edit-labels")
+    {
+        auto const ids = get_selected_torrent_ids();
+
+        if (!ids.empty())
+        {
+            auto w = std::shared_ptr<EditLabelsDialog>(EditLabelsDialog::create(*wind_, core_, ids));
+            gtr_window_on_close(*w, [w]() mutable { w.reset(); });
+            w->show();
+        }
     }
     else if (action_name == "relocate-torrent")
     {
