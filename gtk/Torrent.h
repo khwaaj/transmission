@@ -68,6 +68,7 @@ public:
         STALLED,
         TOTAL_SIZE,
         TRACKERS,
+        LABELS,
         N_FLAGS,
     };
 
@@ -103,6 +104,7 @@ public:
     tr_torrent& get_underlying() const;
     Storage get_total_size() const;
     unsigned int get_trackers() const;
+    std::vector<Glib::ustring> const& get_labels() const;
 
     Glib::RefPtr<Gio::Icon> get_icon() const;
     Glib::ustring get_short_status_text() const;

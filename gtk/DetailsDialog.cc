@@ -16,6 +16,7 @@
 
 #include <libtransmission/file-utils.h>
 #include <libtransmission/string-utils.h>
+#include <libtransmission/transmission.h>
 #include <libtransmission/utils.h>
 #include <libtransmission/values.h>
 #include <libtransmission/web-utils.h>
@@ -34,6 +35,9 @@
 #include <gtkmm/checkbutton.h>
 #include <gtkmm/combobox.h>
 #include <gtkmm/entry.h>
+#if GTKMM_CHECK_VERSION(4, 0, 0)
+#include <gtkmm/eventcontrollerfocus.h>
+#endif
 #include <gtkmm/label.h>
 #include <gtkmm/liststore.h>
 #include <gtkmm/messagedialog.h>
@@ -122,6 +126,8 @@ private:
         core_->exec(TR_KEY_torrent_set, std::move(params));
     }
 
+    void save_labels();
+
     void refreshInfo(std::vector<tr_torrent*> const& torrents);
     void refreshPeers(std::vector<tr_torrent*> const& torrents);
     void refreshTracker(std::vector<tr_torrent*> const& torrents);
@@ -181,6 +187,8 @@ private:
     Gtk::Label* origin_lb_ = nullptr;
     Gtk::Label* destination_lb_ = nullptr;
     Glib::RefPtr<Gtk::TextBuffer> comment_buffer_;
+    Gtk::Entry* labels_entry_ = nullptr;
+    Glib::ustring labels_baseline_;
 
     std::unordered_map<std::string, Gtk::TreeRowReference> peer_hash_;
     std::unordered_map<std::string, Gtk::TreeRowReference> webseed_hash_;
@@ -963,6 +971,50 @@ void DetailsDialog::Impl::refreshInfo(std::vector<tr_torrent*> const& torrents)
 
     hash_lb_->set_text(str);
 
+    /* labels_entry */
+    if (torrents.empty())
+    {
+        labels_entry_->set_sensitive(false);
+        if (!labels_entry_->has_focus())
+        {
+            labels_baseline_ = no_torrent;
+            labels_entry_->set_text(no_torrent);
+        }
+    }
+    else
+    {
+        auto get_label_strings = [](tr_torrent const* tor)
+        {
+            auto result = std::vector<std::string_view>{};
+            for (auto i = size_t{ 0 }, n = tr_torrentLabelCount(tor); i < n; ++i)
+            {
+                result.emplace_back(tr_torrentLabel(tor, i));
+            }
+            return result;
+        };
+
+        auto const baseline_labels = get_label_strings(torrents.front());
+        bool const is_uniform = std::ranges::all_of(
+            torrents,
+            [&](auto const* tor) { return get_label_strings(tor) == baseline_labels; });
+
+        if (is_uniform)
+        {
+            str = Glib::ustring(fmt::format("{}", fmt::join(baseline_labels, ", ")));
+        }
+        else
+        {
+            str = mixed;
+        }
+
+        labels_entry_->set_sensitive(is_uniform);
+        if (!labels_entry_->has_focus())
+        {
+            labels_baseline_ = str;
+            labels_entry_->set_text(str);
+        }
+    }
+
     /* error */
     if (stats.empty())
     {
@@ -1012,11 +1064,46 @@ void DetailsDialog::Impl::refreshInfo(std::vector<tr_torrent*> const& torrents)
     last_activity_lb_->set_text(str);
 }
 
+void DetailsDialog::Impl::save_labels()
+{
+    auto const text = labels_entry_->get_text();
+    if (text == labels_baseline_)
+    {
+        return;
+    }
+
+    labels_baseline_ = text;
+
+    auto labels_vec = tr_variant::Vector{};
+    for (auto const& part : text.raw() | std::views::split(','))
+    {
+        auto const label = gtr_str_strip(std::string(part.begin(), part.end()));
+        if (!label.empty())
+        {
+            labels_vec.emplace_back(label);
+        }
+    }
+
+    torrent_set_field(TR_KEY_labels, std::move(labels_vec));
+}
+
 void DetailsDialog::Impl::info_page_init(Glib::RefPtr<Gtk::Builder> const& builder)
 {
     comment_buffer_ = Gtk::TextBuffer::create();
     auto* tw = gtr_get_widget<Gtk::TextView>(builder, "comment_value_view");
     tw->set_buffer(comment_buffer_);
+
+    labels_entry_ = gtr_get_widget<Gtk::Entry>(builder, "labels_value_entry");
+    labels_entry_->signal_activate().connect(sigc::mem_fun(*this, &Impl::save_labels));
+
+#if GTKMM_CHECK_VERSION(4, 0, 0)
+    auto focus_controller = Gtk::EventControllerFocus::create();
+    focus_controller->signal_leave().connect(sigc::mem_fun(*this, &Impl::save_labels));
+    labels_entry_->add_controller(focus_controller);
+#else
+    labels_entry_->add_events(Gdk::FOCUS_CHANGE_MASK);
+    labels_entry_->signal_focus_out_event().connect_notify(sigc::hide<0>(sigc::mem_fun(*this, &Impl::save_labels)));
+#endif
 }
 
 /****
