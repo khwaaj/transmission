@@ -343,7 +343,12 @@ void MainWindow::Impl::prefsChanged(tr_quark const key)
         break;
 
     case TR_KEY_show_filterbar:
-        filter_->set_visible(gtr_pref_flag_get(key));
+        {
+            bool const visible = gtr_pref_flag_get(key);
+            filter_->set_visible(visible);
+            gtr_action_set_sensitive("show-tracker-combo", visible);
+            gtr_action_set_sensitive("show-label-combo", visible);
+        }
         break;
 
     case TR_KEY_show_toolbar:

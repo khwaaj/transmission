@@ -1482,6 +1482,20 @@ size_t tr_torrentTrackerCount(tr_torrent const* tor)
     return tr_announcerTrackerCount(tor);
 }
 
+std::string_view tr_torrentLabel(tr_torrent const* tor, size_t i)
+{
+    tr_return_val_if_fail(tr_isTorrent(tor), {});
+
+    return tor->labels()[i];
+}
+
+size_t tr_torrentLabelCount(tr_torrent const* tor)
+{
+    tr_return_val_if_fail(tr_isTorrent(tor), {});
+
+    return std::size(tor->labels());
+}
+
 tr_torrent_view tr_torrentView(tr_torrent const* tor)
 {
     tr_return_val_if_fail(tr_isTorrent(tor), {});

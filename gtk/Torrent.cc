@@ -158,6 +158,7 @@ public:
         tr_torrent_activity activity = {};
 
         unsigned int trackers = {};
+        std::vector<Glib::ustring> labels;
         int active_peer_count = {};
         int active_peers_down = {};
         int active_peers_up = {};
@@ -276,6 +277,15 @@ Torrent::ChangeFlags Torrent::Impl::update_cache()
     update_cache_value(cache_.priority, tr_torrentGetPriority(raw_torrent_), result, ChangeFlag::PRIORITY);
     update_cache_value(cache_.queue_position, stats.queue_position, result, ChangeFlag::QUEUE_POSITION);
     update_cache_value(cache_.trackers, build_torrent_trackers_hash(*raw_torrent_), result, ChangeFlag::TRACKERS);
+
+    {
+        auto new_labels = std::vector<Glib::ustring>{};
+        for (auto i = size_t{ 0 }, n = tr_torrentLabelCount(raw_torrent_); i < n; ++i)
+        {
+            new_labels.emplace_back(std::string{ tr_torrentLabel(raw_torrent_, i) });
+        }
+        update_cache_value(cache_.labels, std::move(new_labels), result, ChangeFlag::LABELS);
+    }
     update_cache_value(cache_.error_code, stats.error, result, ChangeFlag::ERROR_CODE);
     update_cache_value(cache_.error_message, Glib::ustring{ stats.error_string }, result, ChangeFlag::ERROR_MESSAGE);
     update_cache_value(
@@ -796,6 +806,11 @@ size_t Torrent::get_queue_position() const
 unsigned int Torrent::get_trackers() const
 {
     return impl_->get_cache().trackers;
+}
+
+std::vector<Glib::ustring> const& Torrent::get_labels() const
+{
+    return impl_->get_cache().labels;
 }
 
 tr_stat::Error Torrent::get_error_code() const

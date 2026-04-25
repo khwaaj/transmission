@@ -116,14 +116,44 @@ bool TorrentFilter::match_text(Torrent const& torrent) const
     return match_text(torrent, text_);
 }
 
+void TorrentFilter::set_label(Label const type, Glib::ustring const& name)
+{
+    if (label_type_ == type && label_name_ == name)
+    {
+        return;
+    }
+
+    auto change = Change::DIFFERENT;
+    if (label_type_ != type)
+    {
+        if (label_type_ == Label::ALL)
+        {
+            change = Change::MORE_STRICT;
+        }
+        else if (type == Label::ALL)
+        {
+            change = Change::LESS_STRICT;
+        }
+    }
+
+    label_type_ = type;
+    label_name_ = name;
+    changed(change);
+}
+
+bool TorrentFilter::match_label(Torrent const& torrent) const
+{
+    return match_label(torrent, label_type_, label_name_);
+}
+
 bool TorrentFilter::match(Torrent const& torrent) const
 {
-    return match_mode(torrent) && match_tracker(torrent) && match_text(torrent);
+    return match_mode(torrent) && match_tracker(torrent) && match_label(torrent) && match_text(torrent);
 }
 
 bool TorrentFilter::matches_all() const
 {
-    return show_mode_ == ShowMode::ShowAll && tracker_type_ == Tracker::ALL && text_.empty();
+    return show_mode_ == ShowMode::ShowAll && tracker_type_ == Tracker::ALL && label_type_ == Label::ALL && text_.empty();
 }
 
 void TorrentFilter::update(Torrent::ChangeFlags changes)
@@ -151,6 +181,11 @@ void TorrentFilter::update(Torrent::ChangeFlags changes)
     if (!refilter_needed)
     {
         refilter_needed = tracker_type_ != Tracker::ALL && changes.test(Flag::TRACKERS);
+    }
+
+    if (!refilter_needed)
+    {
+        refilter_needed = label_type_ != Label::ALL && changes.test(Flag::LABELS);
     }
 
     if (!refilter_needed)
@@ -222,6 +257,31 @@ bool TorrentFilter::match_tracker(Torrent const& torrent, Tracker type, Glib::us
     for (auto i = size_t{ 0 }, n = tr_torrentTrackerCount(&raw_torrent); i < n; ++i)
     {
         if (auto const tracker = tr_torrentTracker(&raw_torrent, i); std::data(tracker.sitename) == host)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool TorrentFilter::match_label(Torrent const& torrent, Label const type, Glib::ustring const& name)
+{
+    if (type == Label::ALL)
+    {
+        return true;
+    }
+
+    if (type == Label::NO_LABEL)
+    {
+        return torrent.get_labels().empty();
+    }
+
+    g_assert(type == Label::LABEL);
+
+    for (auto const& label : torrent.get_labels())
+    {
+        if (label == name)
         {
             return true;
         }

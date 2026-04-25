@@ -901,6 +901,12 @@ struct tr_tracker_view tr_torrentTracker(tr_torrent const* torrent, size_t i);
  */
 size_t tr_torrentTrackerCount(tr_torrent const* torrent);
 
+/** Return the i-th label string on this torrent. */
+[[nodiscard]] std::string_view tr_torrentLabel(tr_torrent const* torrent, size_t i);
+
+/** Return the number of labels on this torrent. */
+[[nodiscard]] size_t tr_torrentLabelCount(tr_torrent const* torrent);
+
 tr_file_view tr_torrentFile(tr_torrent const* torrent, tr_file_index_t file);
 
 size_t tr_torrentFileCount(tr_torrent const* torrent);

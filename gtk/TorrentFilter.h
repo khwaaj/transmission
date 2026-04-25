@@ -26,14 +26,23 @@ public:
         HOST,
     };
 
+    enum class Label : int8_t
+    {
+        ALL,
+        NO_LABEL,
+        LABEL,
+    };
+
 public:
     void set_mode(ShowMode mode);
     void set_tracker(Tracker type, Glib::ustring const& host);
+    void set_label(Label type, Glib::ustring const& name);
     void set_text(Glib::ustring const& text);
 
     bool match_mode(Torrent const& torrent) const;
     bool match_text(Torrent const& torrent) const;
     bool match_tracker(Torrent const& torrent) const;
+    bool match_label(Torrent const& torrent) const;
 
     // FilterBase<Torrent>
     bool match(Torrent const& torrent) const override;
@@ -45,6 +54,7 @@ public:
 
     static bool match_mode(Torrent const& torrent, ShowMode mode);
     static bool match_tracker(Torrent const& torrent, Tracker type, Glib::ustring const& host);
+    static bool match_label(Torrent const& torrent, Label type, Glib::ustring const& name);
     static bool match_text(Torrent const& torrent, Glib::ustring const& text);
 
 private:
@@ -54,5 +64,7 @@ private:
     ShowMode show_mode_ = tr::app::DefaultShowMode;
     Tracker tracker_type_ = Tracker::ALL;
     Glib::ustring tracker_host_;
+    Label label_type_ = Label::ALL;
+    Glib::ustring label_name_;
     Glib::ustring text_;
 };

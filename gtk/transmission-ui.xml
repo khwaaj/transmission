@@ -145,6 +145,11 @@
       </section>
       <section>
         <item>
+          <attribute name="action">win.edit-labels</attribute>
+          <attribute name="label" translatable="yes">Edit _Labels…</attribute>
+          <attribute name="accel">&lt;control&gt;L</attribute>
+        </item>
+        <item>
           <attribute name="action">win.relocate-torrent</attribute>
           <attribute name="label" translatable="yes">Set _Location…</attribute>
         </item>
@@ -191,6 +196,14 @@
         <item>
           <attribute name="action">win.show-filterbar</attribute>
           <attribute name="label" translatable="yes">_Filterbar</attribute>
+        </item>
+        <item>
+          <attribute name="action">win.show-tracker-combo</attribute>
+          <attribute name="label" translatable="yes">Filterbar _Tracker</attribute>
+        </item>
+        <item>
+          <attribute name="action">win.show-label-combo</attribute>
+          <attribute name="label" translatable="yes">Filterbar _Label</attribute>
         </item>
         <item>
           <attribute name="action">win.show-statusbar</attribute>
@@ -413,6 +426,11 @@
       </item>
     </section>
     <section>
+      <item>
+        <attribute name="action">win.edit-labels</attribute>
+        <attribute name="label" translatable="yes">Edit _Labels…</attribute>
+        <attribute name="accel">&lt;control&gt;L</attribute>
+      </item>
       <item>
         <attribute name="action">win.relocate-torrent</attribute>
         <attribute name="label" translatable="yes">Set _Location…</attribute>

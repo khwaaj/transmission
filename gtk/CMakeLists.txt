@@ -12,6 +12,8 @@ target_sources(${TR_NAME}-gtk
         DetailsDialog.h
         Dialogs.cc
         Dialogs.h
+        EditLabelsDialog.cc
+        EditLabelsDialog.h
         DynamicPropertyStore.h
         FaviconCache.cc
         FileList.cc

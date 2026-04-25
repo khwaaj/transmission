@@ -8,6 +8,7 @@
 #include "FilterListModel.hh"
 #include "HigWorkarea.h" // GUI_PAD
 #include "ListModelAdapter.h"
+#include "Prefs.h"
 #include "Session.h" // torrent_cols
 #include "Torrent.h"
 #include "TorrentFilter.h"
@@ -53,9 +54,11 @@ using namespace tr::app;
 namespace
 {
 using TrackerType = TorrentFilter::Tracker;
+using LabelType = TorrentFilter::Label;
 
 constexpr auto ShowModeSeparator = static_cast<ShowMode>(-1);
 constexpr auto TrackerSeparator = static_cast<TrackerType>(-1);
+constexpr auto LabelSeparator = static_cast<LabelType>(-1);
 } // namespace
 
 class FilterBar::Impl
@@ -85,8 +88,11 @@ private:
     static void render_pixbuf_func(Gtk::CellRendererPixbuf& cell_renderer, Gtk::TreeModel::const_iterator const& iter);
     static void render_number_func(Gtk::CellRendererText& cell_renderer, Gtk::TreeModel::const_iterator const& iter);
 
+    void label_combo_box_init(Gtk::ComboBox& combo);
+
     void update_filter_show_mode();
     void update_filter_tracker();
+    void update_filter_label();
     void update_filter_text();
 
     bool show_mode_filter_model_update();
@@ -94,11 +100,15 @@ private:
     bool tracker_filter_model_update();
     void favicon_ready_cb(Glib::RefPtr<Gdk::Pixbuf> const* pixbuf, Gtk::TreeModel::Path const& path);
 
+    bool label_filter_model_update();
+
     void update_filter_models(Torrent::ChangeFlags changes);
     void update_filter_models_idle(Torrent::ChangeFlags changes);
 
     void update_count_label_idle();
     bool update_count_label();
+
+    void prefsChanged(tr_quark key);
 
     static Glib::RefPtr<Gtk::ListStore> show_mode_filter_model_new();
     static void status_model_update_count(Gtk::TreeModel::iterator const& iter, int n);
@@ -107,6 +117,10 @@ private:
     static Glib::RefPtr<Gtk::TreeStore> tracker_filter_model_new();
     static void tracker_model_update_count(Gtk::TreeModel::iterator const& iter, int n);
     static bool is_it_a_separator(Gtk::TreeModel::const_iterator const& iter);
+
+    static Glib::RefPtr<Gtk::ListStore> label_filter_model_new();
+    static void label_model_update_count(Gtk::TreeModel::iterator const& iter, int n);
+    static bool label_is_it_a_separator(Gtk::TreeModel::const_iterator const& iter);
 
     static Glib::ustring get_name_from_host(std::string const& host);
 
@@ -118,9 +132,11 @@ private:
 
     Glib::RefPtr<Gtk::ListStore> const show_mode_model_;
     Glib::RefPtr<Gtk::TreeStore> const tracker_model_;
+    Glib::RefPtr<Gtk::ListStore> const label_model_;
 
     Gtk::ComboBox* show_mode_ = nullptr;
     Gtk::ComboBox* tracker_ = nullptr;
+    Gtk::ComboBox* label_ = nullptr;
     Gtk::Entry* entry_ = nullptr;
     Gtk::Label* show_lb_ = nullptr;
     Glib::RefPtr<TorrentFilter> filter_ = TorrentFilter::create();
@@ -130,6 +146,7 @@ private:
     sigc::connection update_filter_models_tag_;
     sigc::connection update_filter_models_on_add_remove_tag_;
     sigc::connection update_filter_models_on_change_tag_;
+    sigc::connection pref_handler_id_;
 };
 
 // --- TRACKERS
@@ -398,6 +415,199 @@ void FilterBar::Impl::tracker_combo_box_init(Gtk::ComboBox& combo)
     }
 }
 
+// --- Labels
+
+namespace
+{
+
+class LabelFilterModelColumns : public Gtk::TreeModelColumnRecord
+{
+public:
+    LabelFilterModelColumns() noexcept
+    {
+        add(displayname);
+        add(count);
+        add(type);
+        add(name);
+    }
+
+    Gtk::TreeModelColumn<Glib::ustring> displayname;
+    Gtk::TreeModelColumn<int> count;
+    Gtk::TreeModelColumn<LabelType> type;
+    Gtk::TreeModelColumn<Glib::ustring> name;
+};
+
+LabelFilterModelColumns const label_filter_cols;
+
+} // namespace
+
+void FilterBar::Impl::label_model_update_count(Gtk::TreeModel::iterator const& iter, int n)
+{
+    if (n != iter->get_value(label_filter_cols.count))
+    {
+        iter->set_value(label_filter_cols.count, n);
+    }
+}
+
+bool FilterBar::Impl::label_filter_model_update()
+{
+    auto const torrents_model = core_->get_model();
+
+    auto label_counts = std::map<Glib::ustring, int>{};
+    auto n_torrents = 0;
+    auto n_unlabelled = 0;
+
+    for (auto i = 0U, count = torrents_model->get_n_items(); i < count; ++i)
+    {
+        auto const torrent = gtr_ptr_dynamic_cast<Torrent>(torrents_model->get_object(i));
+        if (torrent == nullptr)
+        {
+            continue;
+        }
+
+        auto const& labels = torrent->get_labels();
+        if (labels.empty())
+        {
+            ++n_unlabelled;
+        }
+        else
+        {
+            for (auto const& label : labels)
+            {
+                ++label_counts[label];
+            }
+        }
+
+        ++n_torrents;
+    }
+
+    // Update the "All" row count
+    auto iter = label_model_->children().begin();
+    if (iter)
+    {
+        label_model_update_count(iter, n_torrents);
+    }
+
+    // Update the "No Label" row count
+    ++iter;
+    if (iter)
+    {
+        label_model_update_count(iter, n_unlabelled);
+    }
+
+    // Skip past separator to first label row
+    ++iter;
+    ++iter;
+
+    // Merge sorted label list into the model
+    auto sorted_labels = std::vector<std::pair<Glib::ustring, int>>(label_counts.begin(), label_counts.end());
+
+    size_t i = 0;
+    auto const n_labels = sorted_labels.size();
+
+    for (;;)
+    {
+        bool const new_done = i >= n_labels;
+        bool const old_done = !iter;
+
+        if (new_done && old_done)
+        {
+            break;
+        }
+
+        bool remove_row = false;
+        bool insert_row = false;
+
+        if (new_done)
+        {
+            remove_row = true;
+        }
+        else if (old_done)
+        {
+            insert_row = true;
+        }
+        else
+        {
+            auto const existing = iter->get_value(label_filter_cols.name);
+            int const cmp = existing.raw().compare(sorted_labels.at(i).first.raw());
+
+            if (cmp < 0)
+            {
+                remove_row = true;
+            }
+            else if (cmp > 0)
+            {
+                insert_row = true;
+            }
+        }
+
+        if (remove_row)
+        {
+            iter = label_model_->erase(iter);
+        }
+        else if (insert_row)
+        {
+            auto const& [label_name, label_count] = sorted_labels.at(i);
+            auto const add = label_model_->insert(iter);
+            add->set_value(label_filter_cols.name, label_name);
+            add->set_value(label_filter_cols.displayname, label_name);
+            add->set_value(label_filter_cols.count, label_count);
+            add->set_value(label_filter_cols.type, LabelType::LABEL);
+            ++i;
+        }
+        else // update count
+        {
+            label_model_update_count(iter, sorted_labels.at(i).second);
+            ++iter;
+            ++i;
+        }
+    }
+
+    return false;
+}
+
+Glib::RefPtr<Gtk::ListStore> FilterBar::Impl::label_filter_model_new()
+{
+    auto store = Gtk::ListStore::create(label_filter_cols);
+
+    auto iter = store->append();
+    iter->set_value(label_filter_cols.displayname, Glib::ustring(_("All")));
+    iter->set_value(label_filter_cols.type, LabelType::ALL);
+
+    iter = store->append();
+    iter->set_value(label_filter_cols.displayname, Glib::ustring(_("No Label")));
+    iter->set_value(label_filter_cols.type, LabelType::NO_LABEL);
+
+    iter = store->append();
+    iter->set_value(label_filter_cols.type, LabelSeparator);
+
+    return store;
+}
+
+bool FilterBar::Impl::label_is_it_a_separator(Gtk::TreeModel::const_iterator const& iter)
+{
+    return iter->get_value(label_filter_cols.type) == LabelSeparator;
+}
+
+void FilterBar::Impl::label_combo_box_init(Gtk::ComboBox& combo)
+{
+    combo.set_model(label_model_);
+    combo.set_row_separator_func(sigc::hide<0>(&Impl::label_is_it_a_separator));
+    combo.set_active(0);
+
+    {
+        auto* r = Gtk::make_managed<Gtk::CellRendererText>();
+        combo.pack_start(*r, false);
+        combo.add_attribute(r->property_text(), label_filter_cols.displayname);
+    }
+
+    {
+        auto* r = number_renderer_new();
+        combo.pack_end(*r, true);
+        combo.set_cell_data_func(*r, [r](auto const& iter) { render_number_func(*r, iter); });
+    }
+}
+
 namespace
 {
 
@@ -553,6 +763,20 @@ void FilterBar::Impl::update_filter_text()
     filter_->set_text(entry_->get_text());
 }
 
+void FilterBar::Impl::update_filter_label()
+{
+    if (auto const iter = label_->get_active(); iter)
+    {
+        filter_->set_label(
+            static_cast<LabelType>(iter->get_value(label_filter_cols.type)),
+            iter->get_value(label_filter_cols.name));
+    }
+    else
+    {
+        filter_->set_label(LabelType::ALL, {});
+    }
+}
+
 void FilterBar::Impl::update_filter_show_mode()
 {
     /* set active_show_mode_type_ from the show_mode combobox */
@@ -593,6 +817,13 @@ bool FilterBar::Impl::update_count_label()
         trackerCount = iter->get_value(tracker_filter_cols.count);
     }
 
+    /* get the label count */
+    int labelCount = 0;
+    if (auto const iter = label_->get_active(); iter)
+    {
+        labelCount = iter->get_value(label_filter_cols.count);
+    }
+
     /* get the mode count */
     int modeCount = 0;
     if (auto const iter = show_mode_->get_active(); iter)
@@ -601,7 +832,7 @@ bool FilterBar::Impl::update_count_label()
     }
 
     /* set the text */
-    if (auto const new_markup = visibleCount == std::min(modeCount, trackerCount) ?
+    if (auto const new_markup = visibleCount == std::min({ modeCount, trackerCount, labelCount }) ?
             _("_Show:") :
             fmt::format(fmt::runtime(_("_Show {count:L} of:")), fmt::arg("count", visibleCount));
         new_markup != show_lb_->get_label().raw())
@@ -626,6 +857,7 @@ void FilterBar::Impl::update_filter_models(Torrent::ChangeFlags changes)
         Torrent::ChangeFlag::ACTIVE | Torrent::ChangeFlag::ACTIVITY | Torrent::ChangeFlag::ERROR_CODE |
         Torrent::ChangeFlag::FINISHED;
     static auto constexpr tracker_flags = Torrent::ChangeFlag::TRACKERS;
+    static auto constexpr label_flags = Torrent::ChangeFlag::LABELS;
 
     if (changes.test(show_mode_flags))
     {
@@ -637,9 +869,14 @@ void FilterBar::Impl::update_filter_models(Torrent::ChangeFlags changes)
         tracker_filter_model_update();
     }
 
+    if (changes.test(label_flags))
+    {
+        label_filter_model_update();
+    }
+
     filter_->update(changes);
 
-    if (changes.test(show_mode_flags | tracker_flags))
+    if (changes.test(show_mode_flags | tracker_flags | label_flags))
     {
         update_count_label_idle();
     }
@@ -675,6 +912,7 @@ void FilterBarExtraInit::class_init(void* klass, void* /*user_data*/)
 
     gtk_widget_class_bind_template_child_full(widget_klass, "show_mode_combo", FALSE, 0);
     gtk_widget_class_bind_template_child_full(widget_klass, "tracker_combo", FALSE, 0);
+    gtk_widget_class_bind_template_child_full(widget_klass, "label_combo", FALSE, 0);
     gtk_widget_class_bind_template_child_full(widget_klass, "text_entry", FALSE, 0);
     gtk_widget_class_bind_template_child_full(widget_klass, "show_label", FALSE, 0);
 }
@@ -710,8 +948,10 @@ FilterBar::Impl::Impl(FilterBar& widget, Glib::RefPtr<Session> const& core)
     , core_(core)
     , show_mode_model_(show_mode_filter_model_new())
     , tracker_model_(tracker_filter_model_new())
+    , label_model_(label_filter_model_new())
     , show_mode_(get_template_child<Gtk::ComboBox>("show_mode_combo"))
     , tracker_(get_template_child<Gtk::ComboBox>("tracker_combo"))
+    , label_(get_template_child<Gtk::ComboBox>("label_combo"))
     , entry_(get_template_child<Gtk::Entry>("text_entry"))
     , show_lb_(get_template_child<Gtk::Label>("show_label"))
 {
@@ -722,16 +962,23 @@ FilterBar::Impl::Impl(FilterBar& widget, Glib::RefPtr<Session> const& core)
 
     show_mode_filter_model_update();
     tracker_filter_model_update();
+    label_filter_model_update();
 
     show_mode_combo_box_init(*show_mode_);
     tracker_combo_box_init(*tracker_);
+    label_combo_box_init(*label_);
 
     filter_->signal_changed().connect([this](auto /*changes*/) { update_count_label_idle(); });
 
     filter_model_ = FilterListModel<Torrent>::create(core_->get_sorted_model(), filter_);
 
     tracker_->signal_changed().connect(sigc::mem_fun(*this, &Impl::update_filter_tracker));
+    label_->signal_changed().connect(sigc::mem_fun(*this, &Impl::update_filter_label));
     show_mode_->signal_changed().connect(sigc::mem_fun(*this, &Impl::update_filter_show_mode));
+
+    prefsChanged(TR_KEY_show_tracker_combo);
+    prefsChanged(TR_KEY_show_label_combo);
+    pref_handler_id_ = core_->signal_prefs_changed().connect(sigc::mem_fun(*this, &Impl::prefsChanged));
 
 #if GTKMM_CHECK_VERSION(4, 0, 0)
     entry_->signal_icon_release().connect([this](auto /*icon_position*/) { entry_->set_text({}); });
@@ -741,8 +988,26 @@ FilterBar::Impl::Impl(FilterBar& widget, Glib::RefPtr<Session> const& core)
     entry_->signal_changed().connect(sigc::mem_fun(*this, &Impl::update_filter_text));
 }
 
+void FilterBar::Impl::prefsChanged(tr_quark const key)
+{
+    switch (key)
+    {
+    case TR_KEY_show_tracker_combo:
+        tracker_->set_visible(gtr_pref_flag_get(key));
+        break;
+
+    case TR_KEY_show_label_combo:
+        label_->set_visible(gtr_pref_flag_get(key));
+        break;
+
+    default:
+        break;
+    }
+}
+
 FilterBar::Impl::~Impl()
 {
+    pref_handler_id_.disconnect();
     update_filter_models_on_change_tag_.disconnect();
     update_filter_models_on_add_remove_tag_.disconnect();
     update_filter_models_tag_.disconnect();
