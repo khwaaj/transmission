@@ -59,6 +59,19 @@
       </packing>
     </child>
     <child>
+      <object class="GtkComboBox" id="volume_combo">
+        <property name="width-request">170</property>
+        <property name="visible">True</property>
+        <property name="can-focus">False</property>
+        <property name="margin-end">6</property>
+      </object>
+      <packing>
+        <property name="expand">True</property>
+        <property name="fill">True</property>
+        <property name="position">4</property>
+      </packing>
+    </child>
+    <child>
       <object class="GtkEntry" id="text_entry">
         <property name="visible">True</property>
         <property name="can-focus">True</property>
@@ -67,7 +80,7 @@
       <packing>
         <property name="expand">True</property>
         <property name="fill">True</property>
-        <property name="position">4</property>
+        <property name="position">5</property>
       </packing>
     </child>
   </template>

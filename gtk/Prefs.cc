@@ -71,6 +71,7 @@ std::string gl_confdir;
     map.try_emplace(TR_KEY_show_statusbar, true);
     map.try_emplace(TR_KEY_show_toolbar, true);
     map.try_emplace(TR_KEY_show_tracker_combo, true);
+    map.try_emplace(TR_KEY_show_volume_combo, true);
     map.try_emplace(TR_KEY_show_tracker_scrapes, false);
     map.try_emplace(TR_KEY_sort_mode, to_variant(DefaultSortMode));
     map.try_emplace(TR_KEY_sort_reversed, false);

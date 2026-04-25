@@ -348,6 +348,7 @@ void MainWindow::Impl::prefsChanged(tr_quark const key)
             filter_->set_visible(visible);
             gtr_action_set_sensitive("show-tracker-combo", visible);
             gtr_action_set_sensitive("show-label-combo", visible);
+            gtr_action_set_sensitive("show-volume-combo", visible);
         }
         break;
 

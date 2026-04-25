@@ -146,14 +146,46 @@ bool TorrentFilter::match_label(Torrent const& torrent) const
     return match_label(torrent, label_type_, label_name_);
 }
 
+void TorrentFilter::set_volume(Volume const type, Glib::ustring const& path)
+{
+    if (volume_type_ == type && volume_path_ == path)
+    {
+        return;
+    }
+
+    auto change = Change::DIFFERENT;
+    if (volume_type_ != type)
+    {
+        if (volume_type_ == Volume::ALL)
+        {
+            change = Change::MORE_STRICT;
+        }
+        else if (type == Volume::ALL)
+        {
+            change = Change::LESS_STRICT;
+        }
+    }
+
+    volume_type_ = type;
+    volume_path_ = path;
+    changed(change);
+}
+
+bool TorrentFilter::match_volume(Torrent const& torrent) const
+{
+    return match_volume(torrent, volume_type_, volume_path_);
+}
+
 bool TorrentFilter::match(Torrent const& torrent) const
 {
-    return match_mode(torrent) && match_tracker(torrent) && match_label(torrent) && match_text(torrent);
+    return match_mode(torrent) && match_tracker(torrent) && match_label(torrent) && match_volume(torrent) &&
+        match_text(torrent);
 }
 
 bool TorrentFilter::matches_all() const
 {
-    return show_mode_ == ShowMode::ShowAll && tracker_type_ == Tracker::ALL && label_type_ == Label::ALL && text_.empty();
+    return show_mode_ == ShowMode::ShowAll && tracker_type_ == Tracker::ALL && label_type_ == Label::ALL &&
+        volume_type_ == Volume::ALL && text_.empty();
 }
 
 void TorrentFilter::update(Torrent::ChangeFlags changes)
@@ -285,6 +317,33 @@ bool TorrentFilter::match_label(Torrent const& torrent, Label const type, Glib::
         {
             return true;
         }
+    }
+
+    return false;
+}
+
+bool TorrentFilter::match_volume(Torrent const& torrent, Volume const type, Glib::ustring const& path)
+{
+    if (type == Volume::ALL)
+    {
+        return true;
+    }
+
+    g_assert(type == Volume::VOLUME);
+
+    auto const download_dir = Glib::ustring{ std::string{ tr_torrentGetDownloadDir(&torrent.get_underlying()) } };
+
+    // Match if the download dir equals the volume path or is a subdirectory of it
+    if (download_dir == path)
+    {
+        return true;
+    }
+
+    // Ensure we match at a path boundary (avoid /mnt/data matching /mnt/data2)
+    if (download_dir.size() > path.size() && download_dir[path.size()] == '/' &&
+        download_dir.substr(0, path.size()) == path)
+    {
+        return true;
     }
 
     return false;
