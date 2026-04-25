@@ -198,6 +198,14 @@
           <attribute name="label" translatable="yes">_Filterbar</attribute>
         </item>
         <item>
+          <attribute name="action">win.show-tracker-combo</attribute>
+          <attribute name="label" translatable="yes">Filterbar _Tracker</attribute>
+        </item>
+        <item>
+          <attribute name="action">win.show-label-combo</attribute>
+          <attribute name="label" translatable="yes">Filterbar _Label</attribute>
+        </item>
+        <item>
           <attribute name="action">win.show-statusbar</attribute>
           <attribute name="label" translatable="yes">_Statusbar</attribute>
         </item>

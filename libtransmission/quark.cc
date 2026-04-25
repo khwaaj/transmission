@@ -585,10 +585,12 @@ auto constexpr MyStatic = std::array<std::u8string_view, TR_N_KEYS>{
     u8"show_backup_trackers"sv, // gtk app, qt app
     u8"show_extra_peer_details"sv, // gtk app
     u8"show_filterbar"sv, // gtk app, qt app
+    u8"show_label_combo"sv, // gtk app
     u8"show_notification_area_icon"sv, // gtk app, qt app
     u8"show_options_window"sv, // gtk app, qt app
     u8"show_statusbar"sv, // gtk app, qt app
     u8"show_toolbar"sv, // gtk app, qt app
+    u8"show_tracker_combo"sv, // gtk app
     u8"show_tracker_scrapes"sv, // gtk app, qt app
     u8"sitename"sv, // rpc
     u8"size-bytes"sv, // rpc

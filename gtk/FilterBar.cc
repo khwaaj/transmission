@@ -8,6 +8,7 @@
 #include "FilterListModel.hh"
 #include "HigWorkarea.h" // GUI_PAD
 #include "ListModelAdapter.h"
+#include "Prefs.h"
 #include "Session.h" // torrent_cols
 #include "Torrent.h"
 #include "TorrentFilter.h"
@@ -107,6 +108,8 @@ private:
     void update_count_label_idle();
     bool update_count_label();
 
+    void prefsChanged(tr_quark key);
+
     static Glib::RefPtr<Gtk::ListStore> show_mode_filter_model_new();
     static void status_model_update_count(Gtk::TreeModel::iterator const& iter, int n);
     static bool show_mode_is_it_a_separator(Gtk::TreeModel::const_iterator const& iter);
@@ -143,6 +146,7 @@ private:
     sigc::connection update_filter_models_tag_;
     sigc::connection update_filter_models_on_add_remove_tag_;
     sigc::connection update_filter_models_on_change_tag_;
+    sigc::connection pref_handler_id_;
 };
 
 // --- TRACKERS
@@ -952,6 +956,10 @@ FilterBar::Impl::Impl(FilterBar& widget, Glib::RefPtr<Session> const& core)
     label_->signal_changed().connect(sigc::mem_fun(*this, &Impl::update_filter_label));
     show_mode_->signal_changed().connect(sigc::mem_fun(*this, &Impl::update_filter_show_mode));
 
+    prefsChanged(TR_KEY_show_tracker_combo);
+    prefsChanged(TR_KEY_show_label_combo);
+    pref_handler_id_ = core_->signal_prefs_changed().connect(sigc::mem_fun(*this, &Impl::prefsChanged));
+
 #if GTKMM_CHECK_VERSION(4, 0, 0)
     entry_->signal_icon_release().connect([this](auto /*icon_position*/) { entry_->set_text({}); });
 #else
@@ -960,8 +968,26 @@ FilterBar::Impl::Impl(FilterBar& widget, Glib::RefPtr<Session> const& core)
     entry_->signal_changed().connect(sigc::mem_fun(*this, &Impl::update_filter_text));
 }
 
+void FilterBar::Impl::prefsChanged(tr_quark const key)
+{
+    switch (key)
+    {
+    case TR_KEY_show_tracker_combo:
+        tracker_->set_visible(gtr_pref_flag_get(key));
+        break;
+
+    case TR_KEY_show_label_combo:
+        label_->set_visible(gtr_pref_flag_get(key));
+        break;
+
+    default:
+        break;
+    }
+}
+
 FilterBar::Impl::~Impl()
 {
+    pref_handler_id_.disconnect();
     update_filter_models_on_change_tag_.disconnect();
     update_filter_models_on_add_remove_tag_.disconnect();
     update_filter_models_tag_.disconnect();
