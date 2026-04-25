@@ -29,6 +29,7 @@ public:
     enum class Label : int8_t
     {
         ALL,
+        NO_LABEL,
         LABEL,
     };
 

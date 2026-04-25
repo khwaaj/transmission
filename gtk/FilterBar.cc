@@ -455,6 +455,7 @@ bool FilterBar::Impl::label_filter_model_update()
 
     auto label_counts = std::map<Glib::ustring, int>{};
     auto n_torrents = 0;
+    auto n_unlabelled = 0;
 
     for (auto i = 0U, count = torrents_model->get_n_items(); i < count; ++i)
     {
@@ -464,9 +465,17 @@ bool FilterBar::Impl::label_filter_model_update()
             continue;
         }
 
-        for (auto const& label : torrent->get_labels())
+        auto const& labels = torrent->get_labels();
+        if (labels.empty())
         {
-            ++label_counts[label];
+            ++n_unlabelled;
+        }
+        else
+        {
+            for (auto const& label : labels)
+            {
+                ++label_counts[label];
+            }
         }
 
         ++n_torrents;
@@ -479,7 +488,14 @@ bool FilterBar::Impl::label_filter_model_update()
         label_model_update_count(iter, n_torrents);
     }
 
-    // Skip past "All" and separator
+    // Update the "No Label" row count
+    ++iter;
+    if (iter)
+    {
+        label_model_update_count(iter, n_unlabelled);
+    }
+
+    // Skip past separator to first label row
     ++iter;
     ++iter;
 
@@ -557,6 +573,10 @@ Glib::RefPtr<Gtk::ListStore> FilterBar::Impl::label_filter_model_new()
     auto iter = store->append();
     iter->set_value(label_filter_cols.displayname, Glib::ustring(_("All")));
     iter->set_value(label_filter_cols.type, LabelType::ALL);
+
+    iter = store->append();
+    iter->set_value(label_filter_cols.displayname, Glib::ustring(_("No Label")));
+    iter->set_value(label_filter_cols.type, LabelType::NO_LABEL);
 
     iter = store->append();
     iter->set_value(label_filter_cols.type, LabelSeparator);

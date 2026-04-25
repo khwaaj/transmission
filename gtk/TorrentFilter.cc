@@ -272,6 +272,11 @@ bool TorrentFilter::match_label(Torrent const& torrent, Label const type, Glib::
         return true;
     }
 
+    if (type == Label::NO_LABEL)
+    {
+        return torrent.get_labels().empty();
+    }
+
     g_assert(type == Label::LABEL);
 
     for (auto const& label : torrent.get_labels())
