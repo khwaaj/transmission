@@ -206,6 +206,10 @@
           <attribute name="label" translatable="yes">Filterbar _Label</attribute>
         </item>
         <item>
+          <attribute name="action">win.show-volume-combo</attribute>
+          <attribute name="label" translatable="yes">Filterbar _Volume</attribute>
+        </item>
+        <item>
           <attribute name="action">win.show-statusbar</attribute>
           <attribute name="label" translatable="yes">_Statusbar</attribute>
         </item>

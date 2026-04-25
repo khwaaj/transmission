@@ -33,16 +33,24 @@ public:
         LABEL,
     };
 
+    enum class Volume : int8_t
+    {
+        ALL,
+        VOLUME,
+    };
+
 public:
     void set_mode(ShowMode mode);
     void set_tracker(Tracker type, Glib::ustring const& host);
     void set_label(Label type, Glib::ustring const& name);
+    void set_volume(Volume type, Glib::ustring const& path);
     void set_text(Glib::ustring const& text);
 
     bool match_mode(Torrent const& torrent) const;
     bool match_text(Torrent const& torrent) const;
     bool match_tracker(Torrent const& torrent) const;
     bool match_label(Torrent const& torrent) const;
+    bool match_volume(Torrent const& torrent) const;
 
     // FilterBase<Torrent>
     bool match(Torrent const& torrent) const override;
@@ -55,6 +63,7 @@ public:
     static bool match_mode(Torrent const& torrent, ShowMode mode);
     static bool match_tracker(Torrent const& torrent, Tracker type, Glib::ustring const& host);
     static bool match_label(Torrent const& torrent, Label type, Glib::ustring const& name);
+    static bool match_volume(Torrent const& torrent, Volume type, Glib::ustring const& path);
     static bool match_text(Torrent const& torrent, Glib::ustring const& text);
 
 private:
@@ -66,5 +75,7 @@ private:
     Glib::ustring tracker_host_;
     Label label_type_ = Label::ALL;
     Glib::ustring label_name_;
+    Volume volume_type_ = Volume::ALL;
+    Glib::ustring volume_path_;
     Glib::ustring text_;
 };

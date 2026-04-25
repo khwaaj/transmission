@@ -603,6 +603,7 @@ enum // NOLINT(performance-enum-size)
     TR_KEY_show_toolbar,
     TR_KEY_show_tracker_combo,
     TR_KEY_show_tracker_scrapes,
+    TR_KEY_show_volume_combo,
     TR_KEY_sitename,
     TR_KEY_size_bytes_kebab_APICOMPAT,
     TR_KEY_size_units_kebab_APICOMPAT,

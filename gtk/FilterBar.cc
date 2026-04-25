@@ -18,6 +18,8 @@
 
 #include <libtransmission/tr-macros.h>
 
+#include <giomm/mount.h>
+#include <giomm/volumemonitor.h>
 #include <gdkmm/pixbuf.h>
 #include <glibmm/i18n.h>
 #include <glibmm/main.h>
@@ -55,10 +57,12 @@ namespace
 {
 using TrackerType = TorrentFilter::Tracker;
 using LabelType = TorrentFilter::Label;
+using VolumeType = TorrentFilter::Volume;
 
 constexpr auto ShowModeSeparator = static_cast<ShowMode>(-1);
 constexpr auto TrackerSeparator = static_cast<TrackerType>(-1);
 constexpr auto LabelSeparator = static_cast<LabelType>(-1);
+constexpr auto VolumeSeparator = static_cast<VolumeType>(-1);
 } // namespace
 
 class FilterBar::Impl
@@ -89,10 +93,12 @@ private:
     static void render_number_func(Gtk::CellRendererText& cell_renderer, Gtk::TreeModel::const_iterator const& iter);
 
     void label_combo_box_init(Gtk::ComboBox& combo);
+    void volume_combo_box_init(Gtk::ComboBox& combo);
 
     void update_filter_show_mode();
     void update_filter_tracker();
     void update_filter_label();
+    void update_filter_volume();
     void update_filter_text();
 
     bool show_mode_filter_model_update();
@@ -101,6 +107,8 @@ private:
     void favicon_ready_cb(Glib::RefPtr<Gdk::Pixbuf> const* pixbuf, Gtk::TreeModel::Path const& path);
 
     bool label_filter_model_update();
+
+    bool volume_filter_model_update();
 
     void update_filter_models(Torrent::ChangeFlags changes);
     void update_filter_models_idle(Torrent::ChangeFlags changes);
@@ -122,6 +130,10 @@ private:
     static void label_model_update_count(Gtk::TreeModel::iterator const& iter, int n);
     static bool label_is_it_a_separator(Gtk::TreeModel::const_iterator const& iter);
 
+    static Glib::RefPtr<Gtk::ListStore> volume_filter_model_new();
+    static void volume_model_update_count(Gtk::TreeModel::iterator const& iter, int n);
+    static bool volume_is_it_a_separator(Gtk::TreeModel::const_iterator const& iter);
+
     static Glib::ustring get_name_from_host(std::string const& host);
 
     static Gtk::CellRendererText* number_renderer_new();
@@ -133,12 +145,17 @@ private:
     Glib::RefPtr<Gtk::ListStore> const show_mode_model_;
     Glib::RefPtr<Gtk::TreeStore> const tracker_model_;
     Glib::RefPtr<Gtk::ListStore> const label_model_;
+    Glib::RefPtr<Gtk::ListStore> const volume_model_;
 
     Gtk::ComboBox* show_mode_ = nullptr;
     Gtk::ComboBox* tracker_ = nullptr;
     Gtk::ComboBox* label_ = nullptr;
+    Gtk::ComboBox* volume_ = nullptr;
     Gtk::Entry* entry_ = nullptr;
     Gtk::Label* show_lb_ = nullptr;
+
+    sigc::connection volume_monitor_mount_added_tag_;
+    sigc::connection volume_monitor_mount_removed_tag_;
     Glib::RefPtr<TorrentFilter> filter_ = TorrentFilter::create();
     Glib::RefPtr<FilterListModel<Torrent>> filter_model_;
 
@@ -608,6 +625,230 @@ void FilterBar::Impl::label_combo_box_init(Gtk::ComboBox& combo)
     }
 }
 
+// --- Volumes
+
+namespace
+{
+
+class VolumeFilterModelColumns : public Gtk::TreeModelColumnRecord
+{
+public:
+    VolumeFilterModelColumns() noexcept
+    {
+        add(displayname);
+        add(count);
+        add(type);
+        add(path);
+    }
+
+    Gtk::TreeModelColumn<Glib::ustring> displayname;
+    Gtk::TreeModelColumn<int> count;
+    Gtk::TreeModelColumn<VolumeType> type;
+    Gtk::TreeModelColumn<Glib::ustring> path;
+};
+
+VolumeFilterModelColumns const volume_filter_cols;
+
+} // namespace
+
+void FilterBar::Impl::volume_model_update_count(Gtk::TreeModel::iterator const& iter, int n)
+{
+    if (n != iter->get_value(volume_filter_cols.count))
+    {
+        iter->set_value(volume_filter_cols.count, n);
+    }
+}
+
+bool FilterBar::Impl::volume_filter_model_update()
+{
+    // Build a map of volume path -> torrent count
+    auto const torrents_model = core_->get_model();
+    auto volume_counts = std::map<Glib::ustring, int>{};
+    auto n_torrents = 0;
+
+    for (auto i = 0U, count = torrents_model->get_n_items(); i < count; ++i)
+    {
+        auto const torrent = gtr_ptr_dynamic_cast<Torrent>(torrents_model->get_object(i));
+        if (torrent == nullptr)
+        {
+            continue;
+        }
+
+        auto const download_dir = Glib::ustring{ std::string{ tr_torrentGetDownloadDir(&torrent->get_underlying()) } };
+
+        // Assign torrent to the most-specific matching volume
+        auto best_match = Glib::ustring{};
+        for (auto const& [vpath, _] : volume_counts)
+        {
+            if (TorrentFilter::match_volume(*torrent, VolumeType::VOLUME, vpath) &&
+                vpath.size() > best_match.size())
+            {
+                best_match = vpath;
+            }
+        }
+
+        if (!best_match.empty())
+        {
+            ++volume_counts[best_match];
+        }
+        else
+        {
+            // Torrent doesn't match any existing volume entry yet; will be counted
+            // once we know the full volume list — handled below
+            (void)download_dir;
+        }
+
+        ++n_torrents;
+    }
+
+    // Rebuild volume list from GIO and count torrents per volume
+    auto const monitor = Gio::VolumeMonitor::get();
+    struct VolumeInfo
+    {
+        Glib::ustring displayname;
+        Glib::ustring path;
+        int count = 0;
+    };
+    auto volume_infos = std::vector<VolumeInfo>{};
+
+    for (auto const& mount : monitor->get_mounts())
+    {
+        auto const root = mount->get_root();
+        if (!root)
+        {
+            continue;
+        }
+        auto const path = Glib::ustring{ root->get_path() };
+        if (path.empty() || path == "/")
+        {
+            continue; // skip root filesystem
+        }
+        auto count = 0;
+        for (auto i = 0U, n = torrents_model->get_n_items(); i < n; ++i)
+        {
+            auto const torrent = gtr_ptr_dynamic_cast<Torrent>(torrents_model->get_object(i));
+            if (torrent != nullptr && TorrentFilter::match_volume(*torrent, VolumeType::VOLUME, path))
+            {
+                ++count;
+            }
+        }
+        volume_infos.push_back({ mount->get_name(), path, count });
+    }
+    std::ranges::sort(volume_infos, [](auto const& a, auto const& b) { return a.path < b.path; });
+
+    // Update "All" row
+    auto iter = volume_model_->children().begin();
+    if (iter)
+    {
+        volume_model_update_count(iter, n_torrents);
+    }
+
+    // Skip past separator to first volume row
+    ++iter;
+    ++iter;
+
+    // Merge sorted volume list into model
+    size_t i = 0;
+    auto const n_volumes = volume_infos.size();
+
+    for (;;)
+    {
+        bool const new_done = i >= n_volumes;
+        bool const old_done = !iter;
+
+        if (new_done && old_done)
+        {
+            break;
+        }
+
+        bool remove_row = false;
+        bool insert_row = false;
+
+        if (new_done)
+        {
+            remove_row = true;
+        }
+        else if (old_done)
+        {
+            insert_row = true;
+        }
+        else
+        {
+            auto const existing_path = iter->get_value(volume_filter_cols.path);
+            int const cmp = existing_path.raw().compare(volume_infos.at(i).path.raw());
+            if (cmp < 0)
+            {
+                remove_row = true;
+            }
+            else if (cmp > 0)
+            {
+                insert_row = true;
+            }
+        }
+
+        if (remove_row)
+        {
+            iter = volume_model_->erase(iter);
+        }
+        else if (insert_row)
+        {
+            auto const& info = volume_infos.at(i);
+            auto const add = volume_model_->insert(iter);
+            add->set_value(volume_filter_cols.displayname, info.displayname);
+            add->set_value(volume_filter_cols.path, info.path);
+            add->set_value(volume_filter_cols.count, info.count);
+            add->set_value(volume_filter_cols.type, VolumeType::VOLUME);
+            ++i;
+        }
+        else // update count
+        {
+            volume_model_update_count(iter, volume_infos.at(i).count);
+            ++iter;
+            ++i;
+        }
+    }
+
+    return false;
+}
+
+Glib::RefPtr<Gtk::ListStore> FilterBar::Impl::volume_filter_model_new()
+{
+    auto store = Gtk::ListStore::create(volume_filter_cols);
+
+    auto iter = store->append();
+    iter->set_value(volume_filter_cols.displayname, Glib::ustring(_("All")));
+    iter->set_value(volume_filter_cols.type, VolumeType::ALL);
+
+    iter = store->append();
+    iter->set_value(volume_filter_cols.type, VolumeSeparator);
+
+    return store;
+}
+
+bool FilterBar::Impl::volume_is_it_a_separator(Gtk::TreeModel::const_iterator const& iter)
+{
+    return iter->get_value(volume_filter_cols.type) == VolumeSeparator;
+}
+
+void FilterBar::Impl::volume_combo_box_init(Gtk::ComboBox& combo)
+{
+    combo.set_model(volume_model_);
+    combo.set_row_separator_func(sigc::hide<0>(&Impl::volume_is_it_a_separator));
+    combo.set_active(0);
+
+    {
+        auto* r = Gtk::make_managed<Gtk::CellRendererText>();
+        combo.pack_start(*r, false);
+        combo.add_attribute(r->property_text(), volume_filter_cols.displayname);
+    }
+
+    {
+        auto* r = number_renderer_new();
+        combo.pack_end(*r, true);
+        combo.set_cell_data_func(*r, [r](auto const& iter) { render_number_func(*r, iter); });
+    }
+}
+
 namespace
 {
 
@@ -777,6 +1018,20 @@ void FilterBar::Impl::update_filter_label()
     }
 }
 
+void FilterBar::Impl::update_filter_volume()
+{
+    if (auto const iter = volume_->get_active(); iter)
+    {
+        filter_->set_volume(
+            static_cast<VolumeType>(iter->get_value(volume_filter_cols.type)),
+            iter->get_value(volume_filter_cols.path));
+    }
+    else
+    {
+        filter_->set_volume(VolumeType::ALL, {});
+    }
+}
+
 void FilterBar::Impl::update_filter_show_mode()
 {
     /* set active_show_mode_type_ from the show_mode combobox */
@@ -824,6 +1079,13 @@ bool FilterBar::Impl::update_count_label()
         labelCount = iter->get_value(label_filter_cols.count);
     }
 
+    /* get the volume count */
+    int volumeCount = 0;
+    if (auto const iter = volume_->get_active(); iter)
+    {
+        volumeCount = iter->get_value(volume_filter_cols.count);
+    }
+
     /* get the mode count */
     int modeCount = 0;
     if (auto const iter = show_mode_->get_active(); iter)
@@ -832,7 +1094,7 @@ bool FilterBar::Impl::update_count_label()
     }
 
     /* set the text */
-    if (auto const new_markup = visibleCount == std::min({ modeCount, trackerCount, labelCount }) ?
+    if (auto const new_markup = visibleCount == std::min({ modeCount, trackerCount, labelCount, volumeCount }) ?
             _("_Show:") :
             fmt::format(fmt::runtime(_("_Show {count:L} of:")), fmt::arg("count", visibleCount));
         new_markup != show_lb_->get_label().raw())
@@ -874,6 +1136,9 @@ void FilterBar::Impl::update_filter_models(Torrent::ChangeFlags changes)
         label_filter_model_update();
     }
 
+    // Volume counts are always refreshed since download_dir has no ChangeFlag
+    volume_filter_model_update();
+
     filter_->update(changes);
 
     if (changes.test(show_mode_flags | tracker_flags | label_flags))
@@ -913,6 +1178,7 @@ void FilterBarExtraInit::class_init(void* klass, void* /*user_data*/)
     gtk_widget_class_bind_template_child_full(widget_klass, "show_mode_combo", FALSE, 0);
     gtk_widget_class_bind_template_child_full(widget_klass, "tracker_combo", FALSE, 0);
     gtk_widget_class_bind_template_child_full(widget_klass, "label_combo", FALSE, 0);
+    gtk_widget_class_bind_template_child_full(widget_klass, "volume_combo", FALSE, 0);
     gtk_widget_class_bind_template_child_full(widget_klass, "text_entry", FALSE, 0);
     gtk_widget_class_bind_template_child_full(widget_klass, "show_label", FALSE, 0);
 }
@@ -949,9 +1215,11 @@ FilterBar::Impl::Impl(FilterBar& widget, Glib::RefPtr<Session> const& core)
     , show_mode_model_(show_mode_filter_model_new())
     , tracker_model_(tracker_filter_model_new())
     , label_model_(label_filter_model_new())
+    , volume_model_(volume_filter_model_new())
     , show_mode_(get_template_child<Gtk::ComboBox>("show_mode_combo"))
     , tracker_(get_template_child<Gtk::ComboBox>("tracker_combo"))
     , label_(get_template_child<Gtk::ComboBox>("label_combo"))
+    , volume_(get_template_child<Gtk::ComboBox>("volume_combo"))
     , entry_(get_template_child<Gtk::Entry>("text_entry"))
     , show_lb_(get_template_child<Gtk::Label>("show_label"))
 {
@@ -963,10 +1231,12 @@ FilterBar::Impl::Impl(FilterBar& widget, Glib::RefPtr<Session> const& core)
     show_mode_filter_model_update();
     tracker_filter_model_update();
     label_filter_model_update();
+    volume_filter_model_update();
 
     show_mode_combo_box_init(*show_mode_);
     tracker_combo_box_init(*tracker_);
     label_combo_box_init(*label_);
+    volume_combo_box_init(*volume_);
 
     filter_->signal_changed().connect([this](auto /*changes*/) { update_count_label_idle(); });
 
@@ -974,10 +1244,19 @@ FilterBar::Impl::Impl(FilterBar& widget, Glib::RefPtr<Session> const& core)
 
     tracker_->signal_changed().connect(sigc::mem_fun(*this, &Impl::update_filter_tracker));
     label_->signal_changed().connect(sigc::mem_fun(*this, &Impl::update_filter_label));
+    volume_->signal_changed().connect(sigc::mem_fun(*this, &Impl::update_filter_volume));
     show_mode_->signal_changed().connect(sigc::mem_fun(*this, &Impl::update_filter_show_mode));
+
+    // Rebuild volume list when drives are mounted or unmounted
+    auto const monitor = Gio::VolumeMonitor::get();
+    volume_monitor_mount_added_tag_ = monitor->signal_mount_added().connect(
+        [this](auto const& /*mount*/) { volume_filter_model_update(); });
+    volume_monitor_mount_removed_tag_ = monitor->signal_mount_removed().connect(
+        [this](auto const& /*mount*/) { volume_filter_model_update(); });
 
     prefsChanged(TR_KEY_show_tracker_combo);
     prefsChanged(TR_KEY_show_label_combo);
+    prefsChanged(TR_KEY_show_volume_combo);
     pref_handler_id_ = core_->signal_prefs_changed().connect(sigc::mem_fun(*this, &Impl::prefsChanged));
 
 #if GTKMM_CHECK_VERSION(4, 0, 0)
@@ -1000,6 +1279,10 @@ void FilterBar::Impl::prefsChanged(tr_quark const key)
         label_->set_visible(gtr_pref_flag_get(key));
         break;
 
+    case TR_KEY_show_volume_combo:
+        volume_->set_visible(gtr_pref_flag_get(key));
+        break;
+
     default:
         break;
     }
@@ -1007,6 +1290,8 @@ void FilterBar::Impl::prefsChanged(tr_quark const key)
 
 FilterBar::Impl::~Impl()
 {
+    volume_monitor_mount_removed_tag_.disconnect();
+    volume_monitor_mount_added_tag_.disconnect();
     pref_handler_id_.disconnect();
     update_filter_models_on_change_tag_.disconnect();
     update_filter_models_on_add_remove_tag_.disconnect();
