@@ -219,6 +219,7 @@ Torrent::fields_t Torrent::update(tr_quark const* keys, tr_variant const* const*
             HANDLE_KEY(queue_position, queue_position, QUEUE_POSITION)
             HANDLE_KEY(rate_download, download_speed, DOWNLOAD_SPEED)
             HANDLE_KEY(rate_upload, upload_speed, UPLOAD_SPEED)
+            HANDLE_KEY(move_progress, move_progress, RECHECK_PROGRESS)
             HANDLE_KEY(recheck_progress, recheck_progress, RECHECK_PROGRESS)
             HANDLE_KEY(seed_idle_limit, seed_idle_limit, SEED_IDLE_LIMIT)
             HANDLE_KEY(seed_idle_mode, seed_idle_mode, SEED_IDLE_MODE)
@@ -318,6 +319,12 @@ QString Torrent::activityString() const
 
     case TR_STATUS_SEED:
         return tr("Seeding");
+
+    case TR_STATUS_MOVE_WAIT:
+        return tr("Queued for move");
+
+    case TR_STATUS_MOVE:
+        return tr("Moving");
 
     default:
         return {};

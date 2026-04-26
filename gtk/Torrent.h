@@ -97,6 +97,7 @@ public:
     tr_priority_t get_priority() const;
     size_t get_queue_position() const;
     float get_ratio() const;
+    Percents get_move_progress() const;
     Percents get_recheck_progress() const;
     Percents get_seed_ratio_percent_done() const;
     Speed get_speed_down() const;

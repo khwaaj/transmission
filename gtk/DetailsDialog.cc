@@ -522,6 +522,12 @@ Glib::ustring activityString(int activity, bool finished)
     case TR_STATUS_CHECK:
         return _("Verifying local data");
 
+    case TR_STATUS_MOVE_WAIT:
+        return _("Queued for move");
+
+    case TR_STATUS_MOVE:
+        return C_("Verb", "Moving");
+
     case TR_STATUS_DOWNLOAD_WAIT:
         return _("Queued for download");
 

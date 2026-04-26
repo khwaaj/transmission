@@ -354,6 +354,7 @@ enum // NOLINT(performance-enum-size)
     TR_KEY_metainfo,
     TR_KEY_method,
     TR_KEY_move,
+    TR_KEY_move_progress,
     TR_KEY_msg_type,
     TR_KEY_mtimes,
     TR_KEY_name,

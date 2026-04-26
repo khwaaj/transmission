@@ -393,6 +393,11 @@ public:
         return recheck_progress_;
     }
 
+    [[nodiscard]] constexpr auto getMoveProgress() const noexcept
+    {
+        return move_progress_;
+    }
+
     bool includesTracker(QString const& sitename) const;
 
     [[nodiscard]] constexpr auto const& labels() const noexcept
@@ -663,6 +668,7 @@ private:
     double metadata_percent_complete_ = {};
     double percent_complete_ = {};
     double percent_done_ = {};
+    double move_progress_ = {};
     double recheck_progress_ = {};
     double seed_ratio_limit_ = {};
     double upload_ratio_ = {};

@@ -293,6 +293,10 @@ QString TorrentDelegate::shortStatusString(Torrent const& tor)
         str = tr("Verifying local data (%1% tested)").arg(Formatter::percent_to_string(tor.getVerifyProgress() * 100.0));
         break;
 
+    case TR_STATUS_MOVE:
+        str = tr("Moving (%1% done)").arg(Formatter::percent_to_string(tor.getMoveProgress() * 100.0));
+        break;
+
     case TR_STATUS_DOWNLOAD:
     case TR_STATUS_SEED:
         str = shortTransferString(tor) + QStringLiteral("    ") + tr("Ratio: %1").arg(Formatter::ratio_to_string(tor.ratio()));
@@ -343,6 +347,8 @@ QString TorrentDelegate::statusString(Torrent const& tor)
         case TR_STATUS_CHECK:
         case TR_STATUS_DOWNLOAD_WAIT:
         case TR_STATUS_SEED_WAIT:
+        case TR_STATUS_MOVE_WAIT:
+        case TR_STATUS_MOVE:
             str = shortStatusString(tor);
             break;
 

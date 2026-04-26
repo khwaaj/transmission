@@ -255,7 +255,9 @@ bool TorrentFilter::match_mode(Torrent const& torrent, ShowMode const mode)
         return activity == TR_STATUS_SEED || activity == TR_STATUS_SEED_WAIT;
 
     case ShowMode::ShowActive:
-        return torrent.get_active_peer_count() > 0 || torrent.get_activity() == TR_STATUS_CHECK;
+        return torrent.get_active_peer_count() > 0 ||
+            torrent.get_activity() == TR_STATUS_CHECK ||
+            torrent.get_activity() == TR_STATUS_MOVE;
 
     case ShowMode::ShowPaused:
         return torrent.get_activity() == TR_STATUS_STOPPED;
