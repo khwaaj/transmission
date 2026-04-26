@@ -980,7 +980,10 @@ std::list<std::string> gtr_get_recent_dirs(std::string const& pref)
 
         if (auto const val = gtr_pref_string_get(tr_quark_new(key)); !val.empty())
         {
-            list.push_back(val);
+            if (Gio::File::create_for_path(val)->query_exists())
+            {
+                list.push_back(val);
+            }
         }
     }
 
