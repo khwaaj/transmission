@@ -1951,7 +1951,7 @@ void tr_torrent::MoveMediator::on_move_done(bool const aborted)
                 tor->set_download_dir(new_dir);
                 tor->incomplete_dir_.clear();
                 tor->current_dir_ = tor->download_dir();
-                tor->set_dirty();
+                tor->save_resume_file();
 
                 tor->set_move_state(MoveState::None);
 
