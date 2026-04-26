@@ -787,6 +787,7 @@ void tr_torrentFreeInSessionThread(tr_torrent* tor)
 
     tor->set_dirty(!tor->is_deleting_);
     tor->stop_now();
+    tor->session->move_remove(tor);
 
     if (tor->is_deleting_)
     {
@@ -1788,17 +1789,57 @@ bool tr_torrent::MoveMediator::do_move(std::atomic<bool> const& abort_flag)
     auto const n = tor_->file_count();
     auto const search_paths = std::array<std::string_view, 1>{ old_dir.sv() };
 
+    // Track files that were copied (not renamed) so we can:
+    //   - delete their sources in phase 2 after all copies succeed
+    //   - clean up their destinations if we abort or fail mid-copy
+    struct CopiedFile
+    {
+        std::string src;
+        std::string dst;
+    };
+    auto copied_files = std::vector<CopiedFile>{};
+
+    // Phase 1: move each file. Try atomic rename first (same filesystem);
+    // fall back to copy-only (no source delete) for cross-filesystem moves.
+    // Sources are never deleted until ALL copies have succeeded.
     for (tr_file_index_t i = 0; !abort_flag && i < n; ++i)
     {
         auto const found = tor_->files().find(i, std::data(search_paths), std::size(search_paths));
-        if (found)
+        if (found && !tr_sys_path_is_same(found->filename(), tr_pathbuf{ new_dir, '/', found->subpath() }.sv()))
         {
             auto const new_path = tr_pathbuf{ new_dir, '/', found->subpath() };
-            if (!tr_sys_path_is_same(found->filename(), new_path.sv()))
+
+            // Ensure the destination subdirectory exists before rename or copy
+            if (!tr_sys_dir_create(tr_sys_path_dirname(new_path), TR_SYS_DIR_CREATE_PARENTS, 0777, &error))
             {
-                tr_logAddTraceTor(tor_, fmt::format("Moving file #{} to '{}'", i, new_path));
-                if (!tr_file_move(found->filename(), new_path, true, &error))
+                for (auto const& f : copied_files)
                 {
+                    tr_sys_path_remove(f.dst);
+                }
+                tor_->error().set_local_error(
+                    fmt::format(
+                        fmt::runtime(_("Couldn't move '{old_path}' to '{path}': {error} ({error_code})")),
+                        fmt::arg("old_path", found->filename()),
+                        fmt::arg("path", new_path),
+                        fmt::arg("error", error.message()),
+                        fmt::arg("error_code", error.code())));
+                return false;
+            }
+
+            tr_logAddTraceTor(tor_, fmt::format("Moving file #{} to '{}'", i, new_path));
+
+            if (!tr_sys_path_rename(found->filename(), new_path))
+            {
+                // Rename failed (cross-filesystem). Copy without deleting the source yet.
+                if (!tr_sys_path_copy(found->filename(), new_path, &error))
+                {
+                    // Copy failed — clean up any destination copies from this run so
+                    // the original set of files is fully intact at the source.
+                    tr_sys_path_remove(new_path);
+                    for (auto const& f : copied_files)
+                    {
+                        tr_sys_path_remove(f.dst);
+                    }
                     tor_->error().set_local_error(
                         fmt::format(
                             fmt::runtime(_("Couldn't move '{old_path}' to '{path}': {error} ({error_code})")),
@@ -1808,6 +1849,8 @@ bool tr_torrent::MoveMediator::do_move(std::atomic<bool> const& abort_flag)
                             fmt::arg("error_code", error.code())));
                     return false;
                 }
+
+                copied_files.push_back({ std::string{ found->filename() }, std::string{ new_path } });
             }
         }
 
@@ -1815,7 +1858,34 @@ bool tr_torrent::MoveMediator::do_move(std::atomic<bool> const& abort_flag)
         tor_->mark_changed();
     }
 
-    return !abort_flag;
+    if (abort_flag)
+    {
+        // Clean up destination copies; renamed files cannot be rolled back but
+        // at least the copied ones leave the source intact.
+        for (auto const& f : copied_files)
+        {
+            tr_sys_path_remove(f.dst);
+        }
+        return false;
+    }
+
+    // Phase 2: all copies succeeded — now it is safe to delete the sources.
+    for (auto const& f : copied_files)
+    {
+        if (auto rm_err = tr_error{}; !tr_sys_path_remove(f.src, &rm_err))
+        {
+            // Log but do not fail: the file exists at the destination.
+            tr_logAddWarnTor(
+                tor_,
+                fmt::format(
+                    fmt::runtime(_("Couldn't remove '{path}': {error} ({error_code})")),
+                    fmt::arg("path", f.src),
+                    fmt::arg("error", rm_err.message()),
+                    fmt::arg("error_code", rm_err.code())));
+        }
+    }
+
+    return true;
 }
 
 void tr_torrent::MoveMediator::on_move_done(bool const aborted)
