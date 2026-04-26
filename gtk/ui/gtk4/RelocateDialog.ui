@@ -32,7 +32,7 @@
                         <property name="halign">start</property>
                         <property name="label" translatable="yes">Torrent _location:</property>
                         <property name="use-underline">1</property>
-                        <property name="mnemonic-widget">new_location_button</property>
+                        <property name="mnemonic-widget">location_combo</property>
                         <property name="xalign">0</property>
                         <layout>
                           <property name="column">0</property>
@@ -41,14 +41,25 @@
                       </object>
                     </child>
                     <child>
-                      <object class="gtkmm__CustomObject_10PathButton" id="new_location_button">
+                      <object class="GtkBox" id="location_box">
                         <property name="hexpand">1</property>
-                        <property name="action">select-folder</property>
-                        <layout>
-                          <property name="column">1</property>
-                          <property name="row">0</property>
-                        </layout>
+                        <property name="spacing">6</property>
+                        <child>
+                          <object class="GtkComboBox" id="location_combo">
+                            <property name="hexpand">1</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="GtkButton" id="browse_button">
+                            <property name="label" translatable="yes">_Browse…</property>
+                            <property name="use-underline">1</property>
+                          </object>
+                        </child>
                       </object>
+                      <layout>
+                        <property name="column">1</property>
+                        <property name="row">0</property>
+                      </layout>
                     </child>
                     <child>
                       <object class="GtkCheckButton" id="move_data_radio">

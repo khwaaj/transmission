@@ -968,7 +968,7 @@ std::string gtr_get_full_resource_path(std::string const& rel_path)
 ****
 ***/
 
-size_t const max_recent_dirs = size_t{ 4 };
+size_t const max_recent_dirs = size_t{ 16 };
 
 std::list<std::string> gtr_get_recent_dirs(std::string const& pref)
 {
