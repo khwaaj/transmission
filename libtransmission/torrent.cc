@@ -1789,6 +1789,15 @@ bool tr_torrent::MoveMediator::do_move(std::atomic<bool> const& abort_flag)
     auto const n = tor_->file_count();
     auto const search_paths = std::array<std::string_view, 1>{ old_dir.sv() };
 
+    // Pre-compute total bytes across all files for byte-accurate progress.
+    auto const total_bytes = [&]()
+    {
+        auto total = uint64_t{};
+        for (tr_file_index_t i = 0; i < n; ++i)
+            total += tor_->file_size(i);
+        return std::max(total, uint64_t{ 1 }); // guard against divide-by-zero
+    }();
+
     // Track files that were copied (not renamed) so we can:
     //   - delete their sources in phase 2 after all copies succeed
     //   - clean up their destinations if we abort or fail mid-copy
@@ -1799,11 +1808,14 @@ bool tr_torrent::MoveMediator::do_move(std::atomic<bool> const& abort_flag)
     };
     auto copied_files = std::vector<CopiedFile>{};
 
+    auto bytes_done = uint64_t{};
+
     // Phase 1: move each file. Try atomic rename first (same filesystem);
     // fall back to copy-only (no source delete) for cross-filesystem moves.
     // Sources are never deleted until ALL copies have succeeded.
     for (tr_file_index_t i = 0; !abort_flag && i < n; ++i)
     {
+        auto const file_bytes = tor_->file_size(i);
         auto const found = tor_->files().find(i, std::data(search_paths), std::size(search_paths));
         if (found && !tr_sys_path_is_same(found->filename(), tr_pathbuf{ new_dir, '/', found->subpath() }.sv()))
         {
@@ -1831,7 +1843,16 @@ bool tr_torrent::MoveMediator::do_move(std::atomic<bool> const& abort_flag)
             if (!tr_sys_path_rename(found->filename(), new_path))
             {
                 // Rename failed (cross-filesystem). Copy without deleting the source yet.
-                if (!tr_sys_path_copy(found->filename(), new_path, &error))
+                // Update progress per chunk so the UI reflects bytes copied in real time.
+                auto const bytes_done_before_file = bytes_done;
+                auto const progress_cb = [&](uint64_t file_bytes_done, uint64_t /*file_size*/)
+                {
+                    tor_->move_progress_ = static_cast<float>(bytes_done_before_file + file_bytes_done) /
+                        static_cast<float>(total_bytes);
+                    tor_->mark_changed();
+                };
+
+                if (!tr_sys_path_copy(found->filename(), new_path, &error, progress_cb))
                 {
                     // Copy failed — clean up any destination copies from this run so
                     // the original set of files is fully intact at the source.
@@ -1854,7 +1875,8 @@ bool tr_torrent::MoveMediator::do_move(std::atomic<bool> const& abort_flag)
             }
         }
 
-        tor_->move_progress_ = static_cast<float>(i + 1U) / static_cast<float>(n);
+        bytes_done += file_bytes;
+        tor_->move_progress_ = static_cast<float>(bytes_done) / static_cast<float>(total_bytes);
         tor_->mark_changed();
     }
 

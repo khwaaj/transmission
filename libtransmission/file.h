@@ -149,7 +149,11 @@ template<typename InputIt>
  *
  * @return `True` on success, `false` otherwise (with `error` set accordingly).
  */
-bool tr_sys_path_copy(std::string_view src_path, std::string_view dst_path, tr_error* error = nullptr);
+bool tr_sys_path_copy(
+    std::string_view src_path,
+    std::string_view dst_path,
+    tr_error* error = nullptr,
+    std::function<void(uint64_t /*bytes_done*/, uint64_t /*file_size*/)> const& progress_cb = {});
 
 /**
  * @brief Portability wrapper for `stat()`.
