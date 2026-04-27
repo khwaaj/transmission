@@ -1103,6 +1103,15 @@ size_t buildSearchPathArray(tr_torrent const* tor, std::string_view* paths)
 
 void tr_torrent::set_location(std::string_view location, bool move_from_old_path, int volatile* setme_state)
 {
+    if (tr_sys_path_is_same(current_dir(), location))
+    {
+        if (setme_state != nullptr)
+        {
+            *setme_state = TR_LOC_DONE;
+        }
+        return;
+    }
+
     if (!move_from_old_path)
     {
         // Just update the download dir, no files to move
