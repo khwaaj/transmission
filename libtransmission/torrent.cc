@@ -1101,14 +1101,10 @@ size_t buildSearchPathArray(tr_torrent const* tor, std::string_view* paths)
 } // namespace location_helpers
 } // namespace
 
-void tr_torrent::set_location(std::string_view location, bool move_from_old_path, int volatile* setme_state)
+void tr_torrent::set_location(std::string_view location, bool move_from_old_path)
 {
     if (tr_sys_path_is_same(current_dir(), location))
     {
-        if (setme_state != nullptr)
-        {
-            *setme_state = TR_LOC_DONE;
-        }
         return;
     }
 
@@ -1116,41 +1112,31 @@ void tr_torrent::set_location(std::string_view location, bool move_from_old_path
     {
         // Just update the download dir, no files to move
         session->run_in_session_thread(
-            [this, loc = std::string(location), setme_state]()
+            [this, loc = std::string(location)]()
             {
                 set_download_dir(loc);
                 incomplete_dir_.clear();
                 current_dir_ = download_dir();
                 set_dirty();
-                if (setme_state != nullptr)
-                {
-                    *setme_state = TR_LOC_DONE;
-                }
                 session->rpcNotify(TR_RPC_TORRENT_MOVED, id());
             });
         return;
     }
 
-    if (setme_state != nullptr)
-    {
-        *setme_state = TR_LOC_MOVING;
-    }
-
-    // Enqueue async file move. setme_state is not supported for the async path
-    // since callers polling it are inherently racy; the RPC notification is the
-    // canonical completion signal.
+    // Enqueue async file move. The RPC notification is the canonical
+    // completion signal; use tr_torrentStat().activity to poll move state.
     session->run_in_session_thread(
         [this, loc = std::string(location)]()
         { session->move_add(this, std::make_unique<MoveMediator>(this, loc)); });
 }
 
-void tr_torrentSetLocation(tr_torrent* tor, char const* location, bool move_from_old_path, int volatile* setme_state)
+void tr_torrentSetLocation(tr_torrent* tor, char const* location, bool move_from_old_path)
 {
     tr_return_if_fail(tr_isTorrent(tor));
     tr_return_if_fail(location != nullptr);
     tr_return_if_fail(*location != '\0');
 
-    tor->set_location(location, move_from_old_path, setme_state);
+    tor->set_location(location, move_from_old_path);
 }
 
 std::optional<tr_torrent_files::FoundFile> tr_torrent::find_file(tr_file_index_t file_index) const
@@ -2099,7 +2085,7 @@ void tr_torrent::recheck_completeness()
 
             if (current_dir() == incomplete_dir())
             {
-                set_location(download_dir(), true, nullptr);
+                set_location(download_dir(), true);
             }
 
             done_(this, recent_change);

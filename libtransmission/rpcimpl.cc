@@ -1445,7 +1445,7 @@ namespace make_torrent_field_helpers
     {
         // rpcNotify(TR_RPC_TORRENT_MOVED) is fired by set_location for both paths:
         // inline (no-move) or from MoveMediator::on_move_done (move).
-        tor->set_location(*location, move_flag, nullptr);
+        tor->set_location(*location, move_flag);
     }
 
     return { Error::SUCCESS, {} };

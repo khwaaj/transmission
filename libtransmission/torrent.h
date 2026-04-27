@@ -204,7 +204,7 @@ struct tr_torrent
     {
     }
 
-    void set_location(std::string_view location, bool move_from_old_path, int volatile* setme_state);
+    void set_location(std::string_view location, bool move_from_old_path);
 
     void rename_path(std::string_view oldpath, std::string_view newname, tr_torrent_rename_done_func&& callback);
 

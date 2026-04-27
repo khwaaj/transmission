@@ -170,7 +170,7 @@ void RelocateDialog::Impl::onResponse(int response)
         {
             if (auto* const tor = core_->find_torrent(id); tor != nullptr)
             {
-                tr_torrentSetLocation(tor, location.c_str(), do_move, nullptr);
+                tr_torrentSetLocation(tor, location.c_str(), do_move);
             }
         }
     }

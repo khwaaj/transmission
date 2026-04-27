@@ -170,14 +170,14 @@ TEST_F(MoveTest, setLocation)
     EXPECT_EQ(0, tr_torrentStat(tor).left_until_done);
 
     // now move it
-    auto state = -1;
-    tr_torrentSetLocation(tor, target_dir, true, &state);
-    auto test = [&state]()
-    {
-        return state == TR_LOC_DONE;
-    };
-    EXPECT_TRUE(waitFor(test, MaxWaitMsec));
-    EXPECT_EQ(TR_LOC_DONE, state);
+    tr_torrentSetLocation(tor, target_dir, true);
+    EXPECT_TRUE(waitFor(
+        [tor]()
+        {
+            auto const activity = tr_torrentStat(tor).activity;
+            return activity != TR_STATUS_MOVE_WAIT && activity != TR_STATUS_MOVE;
+        },
+        MaxWaitMsec));
 
     // confirm the torrent is still complete after being moved
     blockingTorrentVerify(tor);
