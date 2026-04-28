@@ -168,6 +168,7 @@ public:
         Percents percent_complete;
         Percents percent_done;
         Percents recheck_progress;
+        Percents move_progress;
         Percents seed_ratio_percent_done;
 
         uint16_t peers_connected = {};
@@ -258,6 +259,7 @@ Torrent::ChangeFlags Torrent::Impl::update_cache()
         result,
         ChangeFlag::ACTIVE_PEERS_DOWN);
     update_cache_value(cache_.recheck_progress, Percents(stats.recheck_progress), result, ChangeFlag::RECHECK_PROGRESS);
+    update_cache_value(cache_.move_progress, Percents(stats.move_progress), result, ChangeFlag::RECHECK_PROGRESS);
     update_cache_value(
         cache_.active,
         stats.peers_sending_to_us > 0 || stats.peers_getting_from_us > 0 || stats.activity == TR_STATUS_CHECK,
@@ -437,11 +439,20 @@ Glib::ustring Torrent::Impl::get_short_status_text() const
     case TR_STATUS_SEED_WAIT:
         return _("Queued for seeding");
 
+    case TR_STATUS_MOVE_WAIT:
+        return _("Queued for move");
+
     case TR_STATUS_CHECK:
         return fmt::format(
             // xgettext:no-c-format
             fmt::runtime(_("Verifying local data ({percent_done}% tested)")),
             fmt::arg("percent_done", cache_.recheck_progress.to_string()));
+
+    case TR_STATUS_MOVE:
+        return fmt::format(
+            // xgettext:no-c-format
+            fmt::runtime(_("Moving ({percent_done}% done)")),
+            fmt::arg("percent_done", cache_.move_progress.to_string()));
 
     case TR_STATUS_DOWNLOAD:
     case TR_STATUS_SEED:
@@ -549,6 +560,8 @@ Glib::ustring Torrent::Impl::get_long_status_text() const
     case TR_STATUS_DOWNLOAD_WAIT:
     case TR_STATUS_SEED_WAIT:
     case TR_STATUS_STOPPED:
+    case TR_STATUS_MOVE_WAIT:
+    case TR_STATUS_MOVE:
         break;
 
     default:
@@ -665,6 +678,8 @@ Glib::ustring Torrent::Impl::get_activity_text() const
     case TR_STATUS_CHECK:
     case TR_STATUS_DOWNLOAD_WAIT:
     case TR_STATUS_SEED_WAIT:
+    case TR_STATUS_MOVE_WAIT:
+    case TR_STATUS_MOVE:
         return get_short_status_text();
 
     case TR_STATUS_DOWNLOAD:
@@ -771,6 +786,11 @@ int Torrent::get_active_peers_up() const
 int Torrent::get_active_peers_down() const
 {
     return impl_->get_cache().active_peers_down;
+}
+
+Percents Torrent::get_move_progress() const
+{
+    return impl_->get_cache().move_progress;
 }
 
 Percents Torrent::get_recheck_progress() const

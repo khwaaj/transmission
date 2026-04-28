@@ -216,6 +216,9 @@ export class Torrent extends EventTarget {
   getQueuePosition() {
     return this.fields.queue_position;
   }
+  getMoveProgress() {
+    return this.fields.move_progress;
+  }
   getRecheckProgress() {
     return this.fields.recheck_progress;
   }
@@ -309,6 +312,10 @@ export class Torrent extends EventTarget {
         return 'Queued for seeding';
       case Torrent._StatusSeed:
         return 'Seeding';
+      case Torrent._StatusMoveWait:
+        return 'Queued for move';
+      case Torrent._StatusMove:
+        return 'Moving';
       case null:
         return 'Unknown';
       default:
@@ -571,6 +578,8 @@ Torrent._StatusDownloadWait = 3;
 Torrent._StatusDownload = 4;
 Torrent._StatusSeedWait = 5;
 Torrent._StatusSeed = 6;
+Torrent._StatusMoveWait = 7;
+Torrent._StatusMove = 8;
 
 // Torrent.fields.seed_ratio_mode
 Torrent._RatioUseGlobal = 0;
@@ -612,6 +621,7 @@ Torrent.Fields.Stats = [
   'labels',
   'left_until_done',
   'metadata_percent_complete',
+  'move_progress',
   'peers_connected',
   'peers_getting_from_us',
   'peers_sending_to_us',

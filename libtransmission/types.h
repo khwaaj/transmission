@@ -66,12 +66,6 @@ using tr_tracker_id_t = uint32_t;
 
 using tr_tracker_tier_t = uint32_t;
 
-enum : uint8_t
-{
-    TR_LOC_MOVING,
-    TR_LOC_DONE,
-    TR_LOC_ERROR
-};
 
 enum : int8_t
 {
@@ -223,7 +217,9 @@ enum tr_torrent_activity : uint8_t
     TR_STATUS_DOWNLOAD_WAIT = 3, /* Queued to download */
     TR_STATUS_DOWNLOAD = 4, /* Downloading */
     TR_STATUS_SEED_WAIT = 5, /* Queued to seed */
-    TR_STATUS_SEED = 6 /* Seeding */
+    TR_STATUS_SEED = 6, /* Seeding */
+    TR_STATUS_MOVE_WAIT = 7, /* Queued to move */
+    TR_STATUS_MOVE = 8 /* Moving */
 };
 
 enum tr_tracker_state : uint8_t
@@ -446,6 +442,11 @@ struct tr_stat
     // Range is [0..1]
     // @see `tr_stat.activity`
     float recheck_progress = {};
+
+    // When `tr_stat.activity` is `TR_STATUS_MOVE` or `TR_STATUS_MOVE_WAIT`,
+    // this is the fraction of files that have been moved.
+    // Range is [0..1]
+    float move_progress = {};
 
     // How much has been downloaded of the entire torrent.
     // Range is [0..1]

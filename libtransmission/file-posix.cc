@@ -216,7 +216,11 @@ bool tr_sys_path_rename(std::string_view const src_path, std::string_view const 
 /* We try to do a fast (in-kernel) copy using a variety of non-portable system
  * calls. If the current implementation does not support in-kernel copying, we
  * use a user-space fallback instead. */
-bool tr_sys_path_copy(std::string_view const src_path, std::string_view const dst_path, tr_error* error)
+bool tr_sys_path_copy(
+    std::string_view const src_path,
+    std::string_view const dst_path,
+    tr_error* error,
+    std::function<void(uint64_t, uint64_t)> const& progress_cb)
 {
     auto local_error = tr_error{};
     if (error == nullptr)
@@ -297,6 +301,8 @@ bool tr_sys_path_copy(std::string_view const src_path, std::string_view const ds
         TR_ASSERT(copied >= 0 && ((uint64_t)copied) <= file_size);
         TR_ASSERT(copied >= 0 && ((uint64_t)copied) <= chunk_size);
         file_size -= copied;
+        if (progress_cb)
+            progress_cb(info->size - file_size, info->size);
     } /* end file_size loop */
     /* at this point errno_cpy is either set or file_size is 0 due to while condition */
 
@@ -350,6 +356,8 @@ bool tr_sys_path_copy(std::string_view const src_path, std::string_view const ds
                 TR_ASSERT(copied >= 0 && ((uint64_t)copied) <= file_size);
                 TR_ASSERT(copied >= 0 && ((uint64_t)copied) <= chunk_size);
                 file_size -= copied;
+                if (progress_cb)
+                    progress_cb(info->size - file_size, info->size);
             } /* end file_size loop */
         } /* end lseek error */
     } /* end fallback check */
@@ -397,6 +405,8 @@ bool tr_sys_path_copy(std::string_view const src_path, std::string_view const ds
                 TR_ASSERT(bytes_read == bytes_written);
                 TR_ASSERT(bytes_written <= file_size);
                 file_size -= bytes_written;
+                if (progress_cb)
+                    progress_cb(info->size - file_size, info->size);
             } /* end file_size loop */
         } /* end lseek error */
     } /* end fallback check */

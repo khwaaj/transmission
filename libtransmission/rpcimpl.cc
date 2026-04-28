@@ -761,6 +761,7 @@ namespace make_torrent_field_helpers
     case TR_KEY_queue_position:
     case TR_KEY_rate_download:
     case TR_KEY_rate_upload:
+    case TR_KEY_move_progress:
     case TR_KEY_recheck_progress:
     case TR_KEY_seconds_downloading:
     case TR_KEY_seconds_seeding:
@@ -912,6 +913,8 @@ namespace make_torrent_field_helpers
         return st.piece_download_speed.base_quantity();
     case TR_KEY_rate_upload:
         return st.piece_upload_speed.base_quantity();
+    case TR_KEY_move_progress:
+        return st.move_progress;
     case TR_KEY_recheck_progress:
         return st.recheck_progress;
     case TR_KEY_seconds_downloading:
@@ -1440,8 +1443,9 @@ namespace make_torrent_field_helpers
     auto const move_flag = args_in.value_if<bool>(TR_KEY_move).value_or(false);
     for (auto* tor : getTorrents(session, args_in))
     {
-        tor->set_location(*location, move_flag, nullptr);
-        session->rpcNotify(TR_RPC_TORRENT_MOVED, tor->id());
+        // rpcNotify(TR_RPC_TORRENT_MOVED) is fired by set_location for both paths:
+        // inline (no-move) or from MoveMediator::on_move_done (move).
+        tor->set_location(*location, move_flag);
     }
 
     return { Error::SUCCESS, {} };

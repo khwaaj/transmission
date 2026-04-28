@@ -483,7 +483,11 @@ bool tr_sys_path_rename(std::string_view const src_path, std::string_view const 
     return ret;
 }
 
-bool tr_sys_path_copy(std::string_view const src_path, std::string_view const dst_path, tr_error* error)
+bool tr_sys_path_copy(
+    std::string_view const src_path,
+    std::string_view const dst_path,
+    tr_error* error,
+    std::function<void(uint64_t, uint64_t)> const& progress_cb)
 {
     auto const wide_src_path = path_to_native_path(src_path);
     auto const wide_dst_path = path_to_native_path(dst_path);
@@ -493,9 +497,32 @@ bool tr_sys_path_copy(std::string_view const src_path, std::string_view const ds
         return false;
     }
 
+    LPPROGRESS_ROUTINE routine = nullptr;
+    LPVOID ctx = nullptr;
+
+    if (progress_cb)
+    {
+        ctx = const_cast<std::function<void(uint64_t, uint64_t)>*>(&progress_cb);
+        routine = [](LARGE_INTEGER total,
+                     LARGE_INTEGER transferred,
+                     LARGE_INTEGER /*stream_size*/,
+                     LARGE_INTEGER /*stream_transferred*/,
+                     DWORD /*stream_num*/,
+                     DWORD /*callback_reason*/,
+                     HANDLE /*src*/,
+                     HANDLE /*dst*/,
+                     LPVOID data) -> DWORD
+        {
+            (*static_cast<std::function<void(uint64_t, uint64_t)>*>(data))(
+                static_cast<uint64_t>(transferred.QuadPart),
+                static_cast<uint64_t>(total.QuadPart));
+            return PROGRESS_CONTINUE;
+        };
+    }
+
     auto cancel = BOOL{ FALSE };
     DWORD const flags = COPY_FILE_ALLOW_DECRYPTED_DESTINATION | COPY_FILE_FAIL_IF_EXISTS;
-    if (!to_bool(CopyFileExW(wide_src_path.c_str(), wide_dst_path.c_str(), nullptr, nullptr, &cancel, flags)))
+    if (!to_bool(CopyFileExW(wide_src_path.c_str(), wide_dst_path.c_str(), routine, ctx, &cancel, flags)))
     {
         set_system_error(error, GetLastError());
         return false;

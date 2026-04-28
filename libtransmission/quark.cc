@@ -343,6 +343,7 @@ auto constexpr MyStatic = std::array<std::u8string_view, TR_N_KEYS>{
     u8"metainfo"sv, // rpc
     u8"method"sv, // json-rpc
     u8"move"sv, // rpc
+    u8"move_progress"sv, // rpc
     u8"msg_type"sv, // BT protocol
     u8"mtimes"sv, // .resume
     u8"name"sv, // .resume, .torrent, rpc

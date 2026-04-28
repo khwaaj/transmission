@@ -38,6 +38,7 @@
 #include "libtransmission/torrent-metainfo.h"
 #include "libtransmission/tr-assert.h"
 #include "libtransmission/tr-macros.h"
+#include "libtransmission/move.h"
 #include "libtransmission/types.h"
 #include "libtransmission/verify.h"
 
@@ -171,6 +172,30 @@ struct tr_torrent
         std::optional<time_t> time_started_;
     };
 
+    class MoveMediator : public tr_move_worker::Mediator
+    {
+    public:
+        MoveMediator(tr_torrent* tor, std::string new_dir)
+            : tor_{ tor }
+            , new_dir_{ std::move(new_dir) }
+        {
+        }
+
+        ~MoveMediator() override = default;
+
+        [[nodiscard]] tr_sha1_digest_t const& info_hash() const override;
+
+        void on_move_queued() override;
+        void on_move_started() override;
+        bool do_move(std::atomic<bool> const& abort_flag) override;
+        void on_move_done(bool aborted) override;
+
+    private:
+        tr_torrent* const tor_;
+        std::string new_dir_;
+        bool was_running_ = false;
+    };
+
     // ---
 
     explicit tr_torrent(tr_torrent_metainfo&& tm)
@@ -179,7 +204,7 @@ struct tr_torrent
     {
     }
 
-    void set_location(std::string_view location, bool move_from_old_path, int volatile* setme_state);
+    void set_location(std::string_view location, bool move_from_old_path);
 
     void rename_path(std::string_view oldpath, std::string_view newname, tr_torrent_rename_done_func&& callback);
 
@@ -717,6 +742,16 @@ struct tr_torrent
 
     [[nodiscard]] constexpr auto activity() const noexcept
     {
+        if (move_state_ == MoveState::Active)
+        {
+            return TR_STATUS_MOVE;
+        }
+
+        if (move_state_ == MoveState::Queued)
+        {
+            return TR_STATUS_MOVE_WAIT;
+        }
+
         if (verify_state_ == VerifyState::Active)
         {
             return TR_STATUS_CHECK;
@@ -1063,6 +1098,13 @@ private:
         Active
     };
 
+    enum class MoveState : uint8_t
+    {
+        None,
+        Queued,
+        Active
+    };
+
     // Tracks a torrent's error state, either local (e.g. file IO errors)
     // or tracker errors (e.g. warnings returned by a tracker).
     class Error
@@ -1263,12 +1305,23 @@ private:
     }
 
     void set_verify_state(VerifyState state);
+    void set_move_state(MoveState state);
 
     [[nodiscard]] constexpr std::optional<float> verify_progress() const noexcept
     {
         if (verify_state_ == VerifyState::Active)
         {
             return verify_progress_;
+        }
+
+        return {};
+    }
+
+    [[nodiscard]] constexpr std::optional<float> move_progress() const noexcept
+    {
+        if (move_state_ == MoveState::Active)
+        {
+            return move_progress_;
         }
 
         return {};
@@ -1332,7 +1385,6 @@ private:
 
     void update_file_path(tr_file_index_t file, std::optional<bool> has_file) const;
 
-    void set_location_in_session_thread(std::string_view path, bool move_from_old_path, int volatile* setme_state);
 
     void rename_path_in_session_thread(
         std::string_view oldpath,
@@ -1414,6 +1466,7 @@ private:
     time_t seconds_seeding_before_current_start_ = 0;
 
     float verify_progress_ = -1.0F;
+    float move_progress_ = 0.0F;
     double seed_ratio_ = 0.0;
 
     tr_announce_key_t announce_key_ = tr_rand_obj<tr_announce_key_t>();
@@ -1425,6 +1478,7 @@ private:
     tr_idlelimit idle_limit_mode_ = TR_IDLELIMIT_GLOBAL;
 
     VerifyState verify_state_ = VerifyState::None;
+    MoveState move_state_ = MoveState::None;
 
     tr_completeness completeness_ = TR_LEECH;
 

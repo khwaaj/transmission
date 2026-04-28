@@ -65,6 +65,7 @@
 #include "libtransmission/tr-dht.h"
 #include "libtransmission/tr-lpd.h"
 #include "libtransmission/tr-macros.h"
+#include "libtransmission/move.h"
 #include "libtransmission/types.h"
 #include "libtransmission/utils-ev.h"
 #include "libtransmission/verify.h"
@@ -1181,6 +1182,9 @@ public:
     void verify_add(tr_torrent* tor);
     void verify_remove(tr_torrent const* tor);
 
+    void move_add(tr_torrent* tor, std::unique_ptr<tr_move_worker::Mediator> mediator);
+    void move_remove(tr_torrent const* tor);
+
     void fetch(tr_web::FetchOptions&& options) const
     {
         if (web_)
@@ -1513,6 +1517,7 @@ private:
     std::unique_ptr<tr::Timer> save_timer_;
 
     std::unique_ptr<tr_verify_worker> verifier_ = std::make_unique<tr_verify_worker>();
+    std::unique_ptr<tr_move_worker> mover_ = std::make_unique<tr_move_worker>();
 
 public:
     std::unique_ptr<tr::Timer> utp_timer;
