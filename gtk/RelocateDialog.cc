@@ -180,9 +180,9 @@ void RelocateDialog::Impl::onResponse(int response)
 
 void RelocateDialog::Impl::rebuild_labels()
 {
-    auto const rows = location_model_->children();
-    for (size_t i = 0; i < paths_.size(); ++i)
-        rows[i].set_value(location_cols.display_label, compute_display_label(paths_[i], paths_));
+    auto it = location_model_->children().begin();
+    for (size_t i = 0; i < paths_.size(); ++i, ++it)
+        it->set_value(location_cols.display_label, compute_display_label(paths_[i], paths_));
 }
 
 void RelocateDialog::Impl::add_and_select_path(std::string const& path)
